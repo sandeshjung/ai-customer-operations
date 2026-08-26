@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
+
 class Product(Base):
     __tablename__ = "products"
 
@@ -16,13 +17,13 @@ class Product(Base):
         nullable=False,
     )
 
-    description: Mapped[str] = mapped_column(
+    description: Mapped[str | None] = mapped_column(
         Text,
-        nullable=False,
+        nullable=True,
     )
 
     price: Mapped[Decimal] = mapped_column(
-        Numeric(precision=10, scale=2),
+        Numeric(10, 2),
         nullable=False,
     )
 
@@ -32,7 +33,7 @@ class Product(Base):
         nullable=False,
     )
 
-    orders = relationship(
+    order_items: Mapped[list["OrderItem"]] = relationship(
         "OrderItem",
-        back_populates="product"
+        back_populates="product",
     )

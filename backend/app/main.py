@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.api.customers import router as customers_router
 from app.core.config import settings
 
 app = FastAPI(
@@ -8,6 +9,8 @@ app = FastAPI(
     description="AI Customer Operations automation platform",
     debug=settings.DEBUG
 )
+
+app.include_router(customers_router, prefix=settings.API_V1_PREFIX)
 
 @app.get("/health")
 async def health_check() -> dict[str, str]:

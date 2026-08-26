@@ -7,14 +7,15 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
+
 class OrderStatus(str, Enum):
-    PENDING = 'PENDING'
-    CONFIRMED = 'CONFIRMED'
-    PROCESSING = 'PROCESSING'
-    SHIPPED = 'SHIPPED'
-    DELIVERED = 'DELIVERED'
-    CANCELED = 'CANCELED'
-    REFUNDED = 'REFUNDED'
+    PENDING = "PENDING"
+    CONFIRMED = "CONFIRMED"
+    PROCESSING = "PROCESSING"
+    SHIPPED = "SHIPPED"
+    DELIVERED = "DELIVERED"
+    CANCELLED = "CANCELLED"
+    REFUNDED = "REFUNDED"
 
 
 class Order(Base):
@@ -23,15 +24,20 @@ class Order(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
 
     customer_id: Mapped[int] = mapped_column(
-        ForeignKey("customers.id"), nullable=False, index=True
+        ForeignKey("customers.id"),
+        nullable=False,
+        index=True,
     )
 
     total_amount: Mapped[Decimal] = mapped_column(
-        Numeric(precision=10, scale=2), nullable=False
+        Numeric(10, 2),
+        nullable=False,
     )
 
     status: Mapped[OrderStatus] = mapped_column(
-        String(30), nullable=False, default=OrderStatus.PENDING
+        String(30),
+        nullable=False,
+        default=OrderStatus.PENDING,
     )
 
     expected_delivery: Mapped[date | None] = mapped_column(
@@ -45,18 +51,18 @@ class Order(Base):
         nullable=False,
     )
 
-    customer = relationship(
+    customer: Mapped["Customer"] = relationship(
         "Customer",
         back_populates="orders",
     )
 
-    items = relationship(
+    items: Mapped[list["OrderItem"]] = relationship(
         "OrderItem",
         back_populates="order",
         cascade="all, delete-orphan",
     )
 
-    shipment = relationship(
+    shipment: Mapped["Shipment | None"] = relationship(
         "Shipment",
         back_populates="order",
         uselist=False,
