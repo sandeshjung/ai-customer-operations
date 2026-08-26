@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environment
+.venv/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Ruff
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+dist/
+.next/
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
+
+# Local data
+data/local/
+
+# Docker
+docker-volumes/

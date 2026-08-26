@@ -1,0 +1,45 @@
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Settings(BaseSettings):
+    APP_NAME: str = "AI Customer Operations"
+    APP_ENV: str = "development"
+    DEBUG: bool = True
+
+    API_V1_PREFIX: str = "/api/v1"
+
+    POSTGRES_HOST: str = "localhost"
+    POSTGRES_PORT: int = 5432
+    POSTGRES_DB: str = "customer_operations"
+    POSTGRES_USER: str = "customer_admin"
+    POSTGRES_PASSWORD: str = "customer_admin"
+
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+
+    QDRANT_HOST: str = "localhost"
+    QDRANT_PORT: int = 6333
+
+    LLM_API_KEY: str | None = None
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+    )
+
+    @property
+    def database_url(self) -> str:
+        return (
+            f"postgresql+psycopg://"
+            f"{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}"
+            f"/{self.postgres_db}"
+        )
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+settings = get_settings()

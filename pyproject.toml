@@ -1,0 +1,32 @@
+[project]
+name = "ai-customer-operations"
+version = "0.1.0"
+description = "AI-powered customer operations automation platform"
+readme = "README.md"
+authors = [
+    { name = "Sandesh Jung Kunwar", email = "sandeshjung@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "psycopg>=3.3.4",
+    "pydantic-settings>=2.15.0",
+    "redis>=8.1.0",
+    "sqlalchemy>=2.0.52",
+    "uvicorn[standard]>=0.52.4",
+]
+
+[project.scripts]
+ai-customer-operations = "ai_customer_operations:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.4",
+]
