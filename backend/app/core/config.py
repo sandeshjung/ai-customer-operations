@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     DEBUG: bool = True
 
+    redis_url: str = "redis://localhost:6379/0"
+
     API_V1_PREFIX: str = "/api/v1"
 
     POSTGRES_HOST: str = "localhost"
