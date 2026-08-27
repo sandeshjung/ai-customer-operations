@@ -1,9 +1,18 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
 from app.models.order import OrderStatus
+
+class OrderItemCreate(BaseModel):
+    product_id: int
+    quantity: int
+
+class OrderCreate(BaseModel):
+    customer_id: int
+    items: list[OrderItemCreate]
+    expected_delivery: date | None = None
 
 class OrderItemResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
