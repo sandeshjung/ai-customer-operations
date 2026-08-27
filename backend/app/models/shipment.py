@@ -1,10 +1,9 @@
 from datetime import datetime
 from enum import Enum
 
+from app.models.base import Base
 from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from app.models.base import Base
 
 
 class ShipmentStatus(str, Enum):

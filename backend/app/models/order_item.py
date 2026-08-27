@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 from decimal import Decimal
 
+from app.models.base import Base
 from sqlalchemy import ForeignKey, Integer, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from app.models.base import Base
 
 
 class OrderItem(Base):
@@ -33,12 +34,12 @@ class OrderItem(Base):
         nullable=False,
     )
 
-    order: Mapped["Order"] = relationship(
+    order: Mapped[Order] = relationship(
         "Order",
         back_populates="items",
     )
 
-    product: Mapped["Product"] = relationship(
+    product: Mapped[Product] = relationship(
         "Product",
         back_populates="order_items",
     )

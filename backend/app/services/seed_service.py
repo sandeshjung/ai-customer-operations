@@ -1,7 +1,7 @@
-from sqlalchemy.orm import Session
-
 from app.models.customer import Customer
 from app.models.product import Product
+from sqlalchemy.orm import Session
+
 
 def seed_basic_data(db: Session):
     customer = Customer(

@@ -1,9 +1,6 @@
-import random 
-from datetime import date, datetime, timedelta
+import random
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-
-from faker import Faker
-from sqlalchemy import delete
 
 from app.core.database import SessionLocal
 from app.models.customer import Customer
@@ -11,12 +8,15 @@ from app.models.order import Order, OrderStatus
 from app.models.order_item import OrderItem
 from app.models.product import Product
 from app.models.shipment import Shipment, ShipmentStatus
+from faker import Faker
+from sqlalchemy import delete
 
 fake = Faker()
 
 NUM_CUSTOMERS = 5000
 NUM_PRODUCTS = 1000
 NUM_ORDERS = 10000
+
 
 def clear_database(db):
     db.execute(delete(Shipment))
@@ -25,6 +25,7 @@ def clear_database(db):
     db.execute(delete(Product))
     db.execute(delete(Customer))
     db.commit()
+
 
 def create_customers(db):
     customers = []
@@ -40,6 +41,7 @@ def create_customers(db):
     db.flush()
 
     return customers
+
 
 def create_products(db):
     products = []
@@ -59,8 +61,7 @@ def create_products(db):
         product = Product(
             name=f"{fake.word().title()} {category}",
             description=fake.sentence(),
-            price=Decimal(str(round(random.uniform(10, 1000), 2))
-            ),
+            price=Decimal(str(round(random.uniform(10, 1000), 2))),
         )
 
         products.append(product)
@@ -70,21 +71,18 @@ def create_products(db):
 
     return products
 
+
 def create_orders(db, customers, products):
     orders = []
 
-    today = date.today()
+    today = datetime.now(UTC).date()
 
     for _ in range(NUM_ORDERS):
         customer = random.choice(customers)
 
-        created_date = today - timedelta(
-            days = random.randint(1, 60)
-        )
+        created_date = today - timedelta(days=random.randint(1, 60))
 
-        expected_delivery = created_date + timedelta(
-            days = random.randint(3, 10)
-        )
+        expected_delivery = created_date + timedelta(days=random.randint(3, 10))
 
         order = Order(
             customer_id=customer.id,
@@ -129,6 +127,7 @@ def create_orders(db, customers, products):
 
     return orders
 
+
 def create_shipments(db, orders):
     carriers = [
         "DHL",
@@ -138,10 +137,7 @@ def create_shipments(db, orders):
     ]
 
     for order in orders:
-        if order.status not in {
-            OrderStatus.SHIPPED,
-            OrderStatus.DELIVERED
-        }:
+        if order.status not in {OrderStatus.SHIPPED, OrderStatus.DELIVERED}:
             continue
 
         shipment_status = random.choice(
@@ -149,22 +145,21 @@ def create_shipments(db, orders):
                 ShipmentStatus.IN_TRANSIT,
                 ShipmentStatus.OUT_FOR_DELIVERY,
                 ShipmentStatus.DELIVERED,
-                ShipmentStatus.EXCEPTION
+                ShipmentStatus.EXCEPTION,
             ]
         )
 
         shipment = Shipment(
             order_id=order.id,
             carrier=random.choice(carriers),
-            tracking_number=fake.unique.bothify(
-                text="TRK-########"
-            ),
+            tracking_number=fake.unique.bothify(text="TRK-########"),
             status=shipment_status,
             last_location=fake.city(),
-            last_updated=datetime.utcnow() - timedelta(hours=random.randint(1, 120))
+            last_updated=datetime.now(UTC) - timedelta(hours=random.randint(1, 120)),
         )
 
         db.add(shipment)
+
 
 def main():
     db = SessionLocal()
@@ -180,17 +175,10 @@ def main():
         products = create_products(db)
 
         print("Creating orders...")
-        orders = create_orders(
-            db,
-            customers,
-            products
-        )
+        orders = create_orders(db, customers, products)
 
         print("Creating shipments...")
-        create_shipments(
-            db,
-            orders
-        )
+        create_shipments(db, orders)
 
         db.commit()
 
@@ -202,6 +190,7 @@ def main():
 
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     main()

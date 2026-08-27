@@ -1,17 +1,14 @@
-from datetime import datetime
-
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from datetime import UTC, datetime
 
 from app.core.database import get_db
 from app.models.order import Order
 from app.models.shipment import Shipment, ShipmentStatus
 from app.schemas.shipment import ShipmentResponse
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
-router = APIRouter(
-    prefix="/shipments",
-    tags=["Shipments"]
-)
+router = APIRouter(prefix="/shipments", tags=["Shipments"])
+
 
 @router.post(
     "/{order_id}",
@@ -43,7 +40,7 @@ def create_shipment(
         tracking_number=tracking_number,
         status=ShipmentStatus.LABEL_CREATED,
         last_location="Warehouse",
-        last_update=datetime.utcnow(),
+        last_update=datetime.now(UTC),
     )
 
     db.add(shipment)

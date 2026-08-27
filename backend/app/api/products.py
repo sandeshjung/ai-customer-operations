@@ -1,14 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-
 from app.core.database import get_db
 from app.models.product import Product
 from app.schemas.product import ProductCreate, ProductResponse
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
-router = APIRouter(
-    prefix="/products",
-    tags=["Products"]
-)
+router = APIRouter(prefix="/products", tags=["Products"])
+
 
 @router.post(
     "",
@@ -29,6 +26,7 @@ def create_product(
     db.refresh(product)
 
     return product
+
 
 @router.get(
     "/{product_id}",

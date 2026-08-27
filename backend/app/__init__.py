@@ -9,9 +9,9 @@ from app.models.support_ticket import SupportTicket
 __all__ = [
     "Base",
     "Customer",
-    "Product",
     "Order",
     "OrderItem",
+    "Product",
     "Shipment",
     "SupportTicket",
 ]

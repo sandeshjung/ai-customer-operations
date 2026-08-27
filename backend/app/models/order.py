@@ -1,11 +1,12 @@
+from __future__ import annotations
+
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 
+from app.models.base import Base
 from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from app.models.base import Base
 
 
 class OrderStatus(str, Enum):
@@ -51,18 +52,18 @@ class Order(Base):
         nullable=False,
     )
 
-    customer: Mapped["Customer"] = relationship(
+    customer: Mapped[Customer] = relationship(
         "Customer",
         back_populates="orders",
     )
 
-    items: Mapped[list["OrderItem"]] = relationship(
+    items: Mapped[list[OrderItem]] = relationship(
         "OrderItem",
         back_populates="order",
         cascade="all, delete-orphan",
     )
 
-    shipment: Mapped["Shipment | None"] = relationship(
+    shipment: Mapped[Shipment | None] = relationship(
         "Shipment",
         back_populates="order",
         uselist=False,
