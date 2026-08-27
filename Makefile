@@ -26,3 +26,6 @@ check:
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run pytest
+
+seed:
+	PYTHONPATH=backend uv run python backend/scripts/seed_database.py
