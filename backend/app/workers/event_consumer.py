@@ -1,7 +1,14 @@
 import json
+import time
 
 from app.core.redis import redis_client
+from app.events.dead_letter import send_to_dead_letter
+from app.events.idempotency import (
+    is_event_processed,
+    mark_event_processed,
+)
 from app.events.publisher import EVENT_STREAM
+from app.workers.config import MAX_RETRIES
 
 
 CONSUMER_GROUP = "customer_operations_workers"
@@ -21,6 +28,21 @@ def create_consumer_group():
             raise
 
 
+def process_event(event: dict) -> None:
+    """
+    Placeholder for actual event processing.
+
+    AI agents and automation handlers will eventually
+    be called from here.
+    """
+
+    print(
+        f"Processing event: "
+        f"{event['event_type']} "
+        f"event_id={event['event_id']}"
+    )
+
+
 def consume_events():
     create_consumer_group()
 
@@ -34,7 +56,7 @@ def consume_events():
                 EVENT_STREAM: ">",
             },
             count=10,
-            block=1000,
+            block=5000,
         )
 
         if not messages:
@@ -44,14 +66,68 @@ def consume_events():
             for message_id, fields in entries:
                 event = json.loads(fields["event"])
 
-                print(
-                    f"Received event "
-                    f"{event['event_type']} "
-                    f"({message_id})"
-                )
+                event_id = event["event_id"]
 
-                redis_client.xack(
-                    EVENT_STREAM,
-                    CONSUMER_GROUP,
-                    message_id,
-                )
+                if is_event_processed(event_id):
+                    print(
+                        f"Skipping already processed event: "
+                        f"{event_id}"
+                    )
+
+                    redis_client.xack(
+                        EVENT_STREAM,
+                        CONSUMER_GROUP,
+                        message_id,
+                    )
+
+                    continue
+
+                success = False
+
+                for attempt in range(1, MAX_RETRIES + 1):
+                    try:
+                        print(
+                            f"Processing attempt "
+                            f"{attempt}/{MAX_RETRIES}: "
+                            f"{event_id}"
+                        )
+
+                        process_event(event)
+
+                        mark_event_processed(event_id)
+
+                        redis_client.xack(
+                            EVENT_STREAM,
+                            CONSUMER_GROUP,
+                            message_id,
+                        )
+
+                        success = True
+                        break
+
+                    except Exception as exc:
+                        print(
+                            f"Event processing failed "
+                            f"(attempt {attempt}): {exc}"
+                        )
+
+                        if attempt < MAX_RETRIES:
+                            time.sleep(2)
+
+                        else:
+                            send_to_dead_letter(
+                                event,
+                                str(exc),
+                            )
+
+                            redis_client.xack(
+                                EVENT_STREAM,
+                                CONSUMER_GROUP,
+                                message_id,
+                            )
+
+                if not success:
+                    print(
+                        f"Event moved to DLQ: "
+                        f"{event_id}"
+                    )
