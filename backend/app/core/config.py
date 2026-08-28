@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     QDRANT_PORT: int = 6333
 
     LLM_API_KEY: str | None = None
+    LLM_MODEL: str = "openai/gpt-oss-120b"
 
     model_config = SettingsConfigDict(
         env_file=".env",
