@@ -4,6 +4,9 @@ from app.api.products import router as products_router
 from app.api.shipments import router as shipments_router
 from app.core.config import settings
 from fastapi import FastAPI
+from app.core.logging import configure_logging
+
+configure_logging()
 
 app = FastAPI(
     title=settings.APP_NAME,

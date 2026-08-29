@@ -10,6 +10,10 @@ from app.events.idempotency import (
 from app.events.publisher import EVENT_STREAM
 from app.workers.config import MAX_RETRIES
 
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
+
 from app.services.agent_service import investigate_delayed_order
 
 CONSUMER_GROUP = "customer_operations_workers"
@@ -31,20 +35,21 @@ def create_consumer_group():
 
 def process_event(event: dict) -> None:
    
-    print(
-        f"Processing event: "
-        f"{event['event_type']} "
-        f"event_id={event['event_id']}"
+    logger.info(
+        "Processing event",
+        extra={
+            "event_id": event["event_id"],
+            "event_type": event["event_type"],
+        },
     )
 
     if event["event_type"] == "ORDER_DELAYED":
 
         data = event["data"]
-
         decision = investigate_delayed_order(
             order_id=data["order_id"],
             delay_days=data["delay_days"],
-            event_id=data["event_id"]
+            event_id=event["event_id"]
         )   
 
         print("Agent decision:")

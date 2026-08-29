@@ -1,5 +1,6 @@
 import json 
-
+import logging
+import time
 from langchain_core.messages import (
     HumanMessage, 
     SystemMessage,
@@ -16,6 +17,9 @@ from app.core.config import settings
 
 from langchain_groq import ChatGroq
 
+
+logger = logging.getLogger(__name__)
+
 MAX_TOOL_ITERATIONS = 5
 
 llm = ChatGroq(
@@ -27,6 +31,13 @@ llm = ChatGroq(
 @tool 
 def get_order(order_id: int) -> dict:
     """Get order information by order ID."""
+
+    logger.info(
+        "Calling get_order tool",
+        extra={
+            "order_id": order_id,
+        },
+    )
 
     from app.core.database import SessionLocal
     from app.agents.tools.order_tools import (
@@ -50,6 +61,13 @@ def get_order(order_id: int) -> dict:
 def get_shipment(order_id: int) -> dict:
     """"Get shipment information for an order."""
 
+    logger.info(
+        "Calling get_shipment tool",
+        extra={
+            "order_id": order_id,
+        },
+    )
+    
     from app.core.database import SessionLocal
     from app.agents.tools.shipment_tools import (
         get_shipment as db_get_shipment
@@ -73,6 +91,13 @@ def get_shipment(order_id: int) -> dict:
 @tool
 def get_customer(customer_id: int) -> dict:
     """Get customer information."""
+
+    logger.info(
+        "Calling get_customer tool",
+        extra={
+            "customer_id": customer_id,
+        },
+    )
 
     from app.core.database import SessionLocal
     from app.agents.tools.customer_tools import (
@@ -139,6 +164,14 @@ def agent_node(
 ):
     messages = state["messages"]
 
+    logger.info(
+        "Agent execution | order_id=%s | tool_iteration=%s",
+        state["order_id"],
+        state["tool_iterations"],
+    )
+
+    start_time = time.perf_counter()
+
     response = llms_with_tools.invoke(
         [
             SystemMessage(
@@ -146,6 +179,17 @@ def agent_node(
             ),
             *messages
         ]
+    )
+
+    latency_ms = (
+        time.perf_counter() - start_time
+    ) * 1000
+
+    logger.info(
+        "LLM completed | order_id=%s | latency_ms=%.2f | tool_calls=%s",
+        state["order_id"],
+        latency_ms,
+        len(getattr(response, "tool_calls", [])),
     )
 
     return {
@@ -175,7 +219,18 @@ def tool_node(
 ):
     current_iterations = state["tool_iterations"]
 
+    logger.info(
+        "Tool execution | order_id=%s | iteration=%s",
+        state["order_id"],
+        current_iterations + 1,
+    )
+
     if current_iterations >= MAX_TOOL_ITERATIONS:
+
+        logger.warning(
+            "Tool iteration limit reached | order_id=%s",
+            state["order_id"],
+        )
         return {
             "requires_human": True,
             "messages": [
@@ -190,6 +245,13 @@ def tool_node(
         }
     tool_executor = ToolNode(tools)
     result = tool_executor.invoke(state)
+
+    logger.info(
+        "Tools completed | order_id=%s | iteration=%s",
+        state["order_id"],
+        current_iterations + 1,
+    )
+
     return {
         **result,
         "tool_iterations": current_iterations + 1
@@ -214,6 +276,13 @@ Do not invent information.
 def decision_node(
     state: DelayedOrderState
 ):
+    logger.info(
+        "Generating final decision | order_id=%s",
+        state["order_id"],
+    )
+
+    start_time = time.perf_counter()
+
     response = llm.invoke(
         [
             SystemMessage(
@@ -222,6 +291,10 @@ def decision_node(
             *state["messages"]
         ]
     )
+
+    latency_ms = (
+        time.perf_counter() - start_time
+    ) * 1000
 
     content = response.content
 
@@ -239,6 +312,16 @@ def decision_node(
 
     decision = AgentDecision.model_validate(
         decision_data
+    )
+
+    logger.info(
+        "Decision generated | order_id=%s | severity=%s | "
+        "resolution=%s | requires_human=%s | latency_ms=%.2f",
+        state["order_id"],
+        decision.severity,
+        decision.resolution,
+        decision.requires_human,
+        latency_ms,
     )
 
     return {
