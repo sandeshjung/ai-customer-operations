@@ -143,7 +143,8 @@ def agent_node(
         [
             SystemMessage(
                 content=SYSTEM_PROMPT
-            )
+            ),
+            *messages
         ]
     )
 
@@ -242,7 +243,7 @@ def decision_node(
 
     return {
         "decision": decision.model_dump(),
-        "required_human": decision.requires_human
+        "requires_human": decision.requires_human
     }
 
 

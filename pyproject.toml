@@ -14,6 +14,8 @@ dependencies = [
     "groq<1.0.0",
     "httpx>=0.28.1",
     "httpx2>=2.12.0",
+    "langchain>=1.3.18",
+    "langchain-core>=1.6.1",
     "langchain-groq>=1.1.3",
     "langgraph>=1.2.11",
     "psycopg>=3.3.4",
