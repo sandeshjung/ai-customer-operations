@@ -20,3 +20,5 @@ class DelayedOrderState(TypedDict):
     decision: dict | None
 
     requires_human: bool
+
+    tool_iterations: int

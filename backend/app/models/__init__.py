@@ -5,6 +5,7 @@ from app.models.order_item import OrderItem
 from app.models.product import Product
 from app.models.shipment import Shipment
 from app.models.support_ticket import SupportTicket
+from app.models.agent_execution import AgentExecution
 
 __all__ = [
     "Base",
@@ -14,4 +15,5 @@ __all__ = [
     "Product",
     "Shipment",
     "SupportTicket",
+    "AgentExecution"
 ]
