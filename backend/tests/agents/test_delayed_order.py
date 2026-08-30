@@ -215,10 +215,10 @@ def test_decision_node_parses_valid_json():
 
         result = decision_node(state)
 
-    assert result["decision"]["severity"] == "HIGH"
+    assert result["decision"].severity == "HIGH"
 
     assert (
-        result["decision"]["resolution"]
+        result["decision"].resolution
         == "CONTACT_CARRIER"
     )
 
@@ -317,10 +317,10 @@ def test_delayed_order_graph():
             }
         )
 
-    assert result["decision"]["severity"] == "HIGH"
+    assert result["decision"].severity == "HIGH"
 
     assert (
-        result["decision"]["resolution"]
+        result["decision"].resolution
         == "CONTACT_CARRIER"
     )
 
