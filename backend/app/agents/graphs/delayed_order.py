@@ -325,7 +325,8 @@ def decision_node(
     )
 
     return {
-        "decision": decision.model_dump(),
+        # "decision": decision.model_dump(),
+        "decision": decision,
         "requires_human": decision.requires_human
     }
 

@@ -14,6 +14,10 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+from app.core.database import SessionLocal
+
+db = SessionLocal()
+
 from app.services.agent_service import investigate_delayed_order
 
 CONSUMER_GROUP = "customer_operations_workers"
@@ -46,7 +50,10 @@ def process_event(event: dict) -> None:
     if event["event_type"] == "ORDER_DELAYED":
 
         data = event["data"]
+        # print(data)
+        # print(type(data))
         decision = investigate_delayed_order(
+            db=db,
             order_id=data["order_id"],
             delay_days=data["delay_days"],
             event_id=event["event_id"]

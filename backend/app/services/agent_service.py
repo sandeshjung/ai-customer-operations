@@ -1,6 +1,7 @@
 from app.agents.graphs.delayed_order import delayed_order_graph
 from app.agents.guardrails import validate_decision
 from app.models.agent_execution import AgentExecution
+from app.agents.models import AgentDecision
 
 import uuid
 from app.core.logging import get_logger
@@ -44,7 +45,10 @@ def investigate_delayed_order(
             "tool_iterations": 0
         }
     )
-
+    # print(result)
+    # print(type(result))
+    # print(result["decision"])
+    
     decision = validate_decision(
         result["decision"]
     )
@@ -59,7 +63,7 @@ def investigate_delayed_order(
             "requires_human": decision.requires_human,
         },
     )
-
+    # print(decision)
     execution = AgentExecution(
         agent_name="delayed_order_agent",
         event_id=event_id,

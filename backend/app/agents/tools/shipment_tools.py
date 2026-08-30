@@ -23,9 +23,4 @@ def get_shipment(
         "tracking_number": shipment.tracking_number,
         "status": shipment.status,
         "carrier": shipment.carrier,
-        "estimated_delivery": (
-            shipment.estimated_delivery.isoformat()
-            if shipment.estimated_delivery
-            else None
-        ),
     }
