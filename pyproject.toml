@@ -26,6 +26,7 @@ dependencies = [
     "psycopg-binary>=3.3.4",
     "pydantic-settings>=2.15.0",
     "pydantic[email]>=2.13.4",
+    "pypdf>=6.16.2",
     "qdrant-client>=1.19.0",
     "redis>=8.1.0",
     "sentence-transformers>=6.0.0",
