@@ -14,9 +14,10 @@ from app.agents.models import AgentDecision
 from app.agents.state import DelayedOrderState
 from app.ai.client import client
 from app.core.config import settings
+from app.rag.retriever import search_policy
 
 from langchain_groq import ChatGroq
-
+from langchain_core.tools import tool
 
 logger = logging.getLogger(__name__)
 
@@ -119,10 +120,17 @@ def get_customer(customer_id: int) -> dict:
     finally:
         db.close()
 
+@tool
+def search_shipping_policy(query:str) -> list[dict]:
+    """Search company policies and support documentation."""
+
+    return search_policy(query=query, limit=5)
+
 tools = [
     get_order,
     get_shipment,
-    get_customer
+    get_customer,
+    search_shipping_policy
 ]
 
 llms_with_tools = llm.bind_tools(tools)
@@ -157,6 +165,16 @@ After gathering enough information, determine:
 You must not perform actions that modify the database.
 
 You are an investigation and recommendation agent only.
+
+When determining an operational resolution, use
+search_shipping_policy to retrieve relevant company policy.
+
+Do not rely on general knowledge for company policies.
+
+If a policy is relevant to the decision, retrieve it
+before making the decision.
+
+Never invent policy rules.
 """
 
 def agent_node(
