@@ -1,0 +1,53 @@
+ACME COMMERCE SHIPPING POLICY
+Version: 1.0
+
+1. Standard Delivery
+
+Standard delivery normally takes 3–5 business days.
+
+2. Delayed Shipments
+
+An order is considered delayed when the current date is later than
+the expected delivery date.
+
+If an order is delayed by more than 48 hours:
+
+- The customer should be notified.
+- The shipment tracking information should be reviewed.
+- If tracking has not updated for more than 48 hours, the carrier
+  should be contacted.
+
+3. Serious Delays
+
+If an order is delayed by more than 5 days:
+
+- The case should be treated as high priority.
+- The shipment should be investigated.
+- A support ticket should be created.
+- The customer should be notified.
+
+4. Missing Tracking Information
+
+If an order is delayed but has no tracking number:
+
+- Do not assume the shipment was lost.
+- Verify the order and shipment records.
+- Escalate the case to a support agent.
+
+5. Lost Packages
+
+A package may be considered potentially lost when:
+
+- The carrier confirms loss, OR
+- Tracking has shown no movement for 7 or more days.
+
+The AI agent must not independently declare a package lost without
+carrier confirmation.
+
+6. Customer Communication
+
+Customers should receive accurate information based on verified
+order and shipment data.
+
+The system must not invent tracking locations, carrier updates,
+delivery dates, or refund decisions.

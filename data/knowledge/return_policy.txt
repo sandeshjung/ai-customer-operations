@@ -1,0 +1,27 @@
+ACME COMMERCE RETURN POLICY
+Version: 1.0
+
+1. Return Window
+
+Customers may request a return within 30 days of delivery.
+
+2. Eligibility
+
+Items must generally be unused and in resalable condition unless
+the return is related to a defective or damaged product.
+
+3. Damaged Items
+
+Customers reporting damaged items should be routed to the support
+process for review.
+
+4. Late Return Requests
+
+Requests submitted outside the normal return window require
+human review.
+
+5. AI Restrictions
+
+The AI agent must not approve exceptions to the return policy.
+
+If policy eligibility is unclear, escalate to a human.

@@ -1,0 +1,21 @@
+ACME COMMERCE WARRANTY POLICY
+Version: 1.0
+
+1. Warranty Period
+
+Eligible products may have a warranty period specified by their
+product documentation.
+
+2. Defective Products
+
+Customers reporting defective products should provide the relevant
+order and product information.
+
+3. Warranty Decisions
+
+The AI system may explain the warranty policy but must not make
+final warranty approval decisions when eligibility is uncertain.
+
+4. Escalation
+
+Unclear warranty cases must be escalated to a human support agent.

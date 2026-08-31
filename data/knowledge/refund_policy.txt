@@ -1,0 +1,31 @@
+ACME COMMERCE REFUND POLICY
+Version: 1.0
+
+1. General Refunds
+
+Refund eligibility depends on the order status and reason for the
+refund request.
+
+2. Delayed Orders
+
+A delayed shipment does not automatically qualify for a refund.
+
+The support team must review the order and shipment circumstances
+before approving a refund.
+
+3. Cancelled Orders
+
+If an order has not shipped and cancellation is approved, the
+customer may be eligible for a full refund.
+
+4. Delivered Orders
+
+Refund requests for delivered orders require review according to
+the return and refund procedures.
+
+5. AI Restrictions
+
+The AI agent must not promise a refund unless the applicable policy
+and order information clearly support the action.
+
+When eligibility is unclear, escalate to a human support agent.

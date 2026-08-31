@@ -1,0 +1,40 @@
+ACME COMMERCE SUPPORT MANUAL
+Version: 1.0
+
+1. General Rule
+
+Support decisions must be based on verified customer, order,
+shipment, and policy information.
+
+2. Missing Information
+
+If important information is missing, the AI agent should retrieve
+additional information or escalate the case.
+
+3. High Priority Cases
+
+Cases involving serious shipment delays, potentially lost packages,
+or unclear customer-impacting decisions should receive higher
+priority.
+
+4. Human Escalation
+
+The AI should escalate when:
+
+- Required information is unavailable.
+- Policy interpretation is ambiguous.
+- The requested action requires human authorization.
+- The customer situation is unusually complex.
+
+5. Customer Communication
+
+Messages must be factual, concise, and based on verified
+information.
+
+Never invent:
+
+- tracking information
+- delivery dates
+- refund approvals
+- carrier actions
+- policy exceptions

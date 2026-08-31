@@ -23,6 +23,8 @@ class Settings(BaseSettings):
 
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
+    QDRANT_COLLECTION: str = "customer_operations_knowledge"
+    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
 
     LLM_API_KEY: str | None = None
     LLM_MODEL: str = "openai/gpt-oss-120b"
