@@ -190,16 +190,10 @@ def agent_node(
 
     start_time = time.perf_counter()
 
-    response = llms_with_tools.invoke(
-        [
-            # SystemMessage(
-            #     content=SYSTEM_PROMPT
-             SystemMessage(content=DECISION_PROMPT),
-            *state["messages"]
-            # ),
-            # *messages
-        ]
-    )
+    response = llms_with_tools.invoke([
+        SystemMessage(content=SYSTEM_PROMPT),   # ← tells LLM to investigate using tools
+        *state["messages"]
+    ])
 
     latency_ms = (
         time.perf_counter() - start_time

@@ -6,7 +6,6 @@ from app.agents.models import AgentDecision
 import uuid
 from app.core.logging import get_logger
 
-execution_id = str(uuid.uuid4())
 logger = get_logger(__name__)
 
 def investigate_delayed_order(
@@ -15,6 +14,7 @@ def investigate_delayed_order(
         delay_days: int,
         event_id: str
 ):
+    execution_id = str(uuid.uuid4())
     logger.info(
         "Starting delayed order investigation",
         extra={

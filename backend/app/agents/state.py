@@ -23,4 +23,4 @@ class DelayedOrderState(TypedDict):
 
     tool_iterations: int
 
-    evidence = list[dict]
+    evidence: list[dict]

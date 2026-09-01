@@ -62,7 +62,7 @@ def get_delayed_orders(
             )
         )
 
-        return results
+    return results
 
 
 @router.get(

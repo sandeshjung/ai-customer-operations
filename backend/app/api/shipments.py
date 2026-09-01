@@ -40,7 +40,7 @@ def create_shipment(
         tracking_number=tracking_number,
         status=ShipmentStatus.LABEL_CREATED,
         last_location="Warehouse",
-        last_update=datetime.now(UTC),
+        last_updated=datetime.now(UTC),
     )
 
     db.add(shipment)
