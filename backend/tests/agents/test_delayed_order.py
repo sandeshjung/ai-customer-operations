@@ -218,6 +218,7 @@ def test_decision_node_parses_valid_json():
     assert result["decision"].severity == "HIGH"
 
     assert (
+
         result["decision"].resolution
         == "CONTACT_CARRIER"
     )

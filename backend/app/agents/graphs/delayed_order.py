@@ -19,6 +19,9 @@ from app.rag.service import retrieve_policy
 from langchain_groq import ChatGroq
 from langchain_core.tools import tool
 
+from app.core.logging import configure_logging
+configure_logging()
+
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ITERATIONS = 5
@@ -123,8 +126,9 @@ def get_customer(customer_id: int) -> dict:
 @tool
 def search_shipping_policy(query: str) -> str:
     """Search company policies and support documentation."""
-    results = retrieve_policy(query=query, limit=5)
-    return json.dumps(results, ensure_ascii=False)
+    # results = retrieve_policy(query=query, limit=5)
+    # return json.dumps(results, ensure_ascii=False)
+    return retrieve_policy(query=query, limit=5)
 
 tools = [
     get_order,
@@ -276,7 +280,7 @@ Based on the investigation above, produce the final operational decision.
 
 If policy documents were retrieved, use them as the source of truth.
 
-Return ONLY valid JSON:
+Return ONLY valid JSON. Do not use markdown code blocks. Do not add explanations before or after the JSON. The response must start with { and end with }.
 
 {
   "severity": "LOW | MEDIUM | HIGH | CRITICAL",
@@ -311,56 +315,75 @@ def decision_node(
 
     start_time = time.perf_counter()
 
-    response = llm.invoke(
-        [
-            SystemMessage(
-                content=DECISION_PROMPT
-            ),
-            *state["messages"]
-        ]
-    )
+    try:
+        structured_llm = llm.with_structured_output(AgentDecision)
+        raw_decision = structured_llm.invoke(
+            [
+                SystemMessage(content=DECISION_PROMPT),
+                *state["messages"],
+            ]
+        )
+
+        if isinstance(raw_decision, AgentDecision):
+            decision = raw_decision
+        elif isinstance(raw_decision, dict):
+            decision = AgentDecision.model_validate(raw_decision)
+        else:
+            content = getattr(raw_decision, "content", None)
+            if not isinstance(content, str):
+                raise ValueError("Unexpected LLM response format")
+            decision = AgentDecision.model_validate(json.loads(content))
+
+    except Exception as exc:
+        logger.warning(
+            "Structured decision output failed for order_id=%s; falling back to raw JSON parse | error=%s",
+            state["order_id"],
+            exc,
+        )
+
+        response = llm.invoke(
+            [
+                SystemMessage(content=DECISION_PROMPT),
+                *state["messages"],
+            ]
+        )
+
+        content = getattr(response, "content", None)
+        if not isinstance(content, str):
+            raise ValueError("Unexpected LLM response format") from exc
+
+        try:
+            decision_data = json.loads(content)
+        except json.JSONDecodeError as parse_exc:
+            raise ValueError(
+                f"Invalid decision JSON: {content}"
+            ) from parse_exc
+
+        decision = AgentDecision.model_validate(decision_data)
+
+    decision = validate_decision(decision)
 
     latency_ms = (
         time.perf_counter() - start_time
     ) * 1000
 
-    content = response.content
-
-    if not isinstance(content, str):
-        raise ValueError(
-            "Unexpected LLM response format"
-        )
-
-    try:
-        decision_data = json.loads(content)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"Invalid decision JSON: {content}"
-        ) from exc
-
-    decision = AgentDecision.model_validate(
-        decision_data
-    )
-
     logger.info(
-        "Decision generated | order_id=%s | severity=%s | "
-        "resolution=%s | requires_human=%s | latency_ms=%.2f",
+        "Decision generated | order_id=%s | severity=%s | resolution=%s | requires_human=%s | latency_ms=%.2f | reason=%s",
         state["order_id"],
         decision.severity,
         decision.resolution,
         decision.requires_human,
         latency_ms,
+        decision.reasoning,
     )
 
     return {
-        # "decision": decision.model_dump(),
         "decision": decision,
         "requires_human": decision.requires_human,
         "evidence": [
             evidence.model_dump()
-            # evidence 
             for evidence in decision.evidence
-        ]
+        ],
     }
 
 

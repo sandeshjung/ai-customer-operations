@@ -57,7 +57,7 @@ def get_delayed_orders(
                 customer_id=order.customer_id,
                 expected_delivery=order.expected_delivery,
                 delay_days=delay_days,
-                shipment_status=(shipment.status.value if shipment else None),
+                shipment_status=(shipment.status if shipment else None),
                 tracking_number=(shipment.tracking_number if shipment else None),
             )
         )

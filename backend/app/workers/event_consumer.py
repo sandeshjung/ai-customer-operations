@@ -15,8 +15,8 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 from app.core.database import SessionLocal
+from app.agents.tools.order_tools import get_order
 
-db = SessionLocal()
 
 from app.services.agent_service import investigate_delayed_order
 
@@ -25,6 +25,7 @@ CONSUMER_NAME = "worker-1"
 
 
 def create_consumer_group():
+    db = SessionLocal()
     try:
         redis_client.xgroup_create(
             EVENT_STREAM,
@@ -37,32 +38,47 @@ def create_consumer_group():
             raise
 
 
+from app.services.action_service import execute_decision
+from app.agents.tools.order_tools import get_order  # or your order service
+
 def process_event(event: dict) -> None:
-   
-    logger.info(
-        "Processing event",
-        extra={
-            "event_id": event["event_id"],
-            "event_type": event["event_type"],
-        },
-    )
+    db = SessionLocal()
+    try:
+        if event["event_type"] == "ORDER_DELAYED":
+            data = event["data"]
+            decision = investigate_delayed_order(
+                db=db,
+                order_id=data["order_id"],
+                delay_days=data["delay_days"],
+                event_id=event["event_id"]
+            )
 
-    if event["event_type"] == "ORDER_DELAYED":
+            # Fetch customer_id from order
+            order = get_order(db, data["order_id"])
+            customer_id = order.get("customer_id") if order else None
 
-        data = event["data"]
-        # print(data)
-        # print(type(data))
-        decision = investigate_delayed_order(
-            db=db,
-            order_id=data["order_id"],
-            delay_days=data["delay_days"],
-            event_id=event["event_id"]
-        )   
-
-        print("Agent decision:")
-
-        print(decision.model_dump_json(indent=2))
-
+            if customer_id:
+                result = execute_decision(
+                    db=db,
+                    order_id=data["order_id"],
+                    customer_id=customer_id,
+                    decision=decision,
+                )
+                logger.info(
+                    "Decision executed",
+                    extra={
+                        "event_id": event["event_id"],
+                        "actions": result["actions"],
+                        "ticket_id": result.get("ticket_id"),
+                    },
+                )
+            else:
+                logger.warning(
+                    "No customer_id found for order",
+                    extra={"order_id": data["order_id"]},
+                )
+    finally:
+        db.close()
 
 def consume_events():
     create_consumer_group()
