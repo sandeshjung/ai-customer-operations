@@ -22,7 +22,7 @@ def search_policy(
     output = []
 
     for document, score in results:
-        if score > 0.8:
+        if score < 0.6:
             continue
 
         output.append(

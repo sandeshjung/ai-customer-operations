@@ -1,4 +1,4 @@
-from rank_bm25 import BM250kapi
+from rank_bm25 import BM25Okapi
 
 class BM25Retriever:
 
@@ -10,7 +10,7 @@ class BM25Retriever:
             for document in documents
         ]
 
-        self.bm25 = BM250kapi(tokenized_documents)
+        self.bm25 = BM25Okapi(tokenized_documents)
 
     def search(self, query: str, limit: int = 5) -> list[dict]:
 

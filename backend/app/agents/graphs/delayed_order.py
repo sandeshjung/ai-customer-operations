@@ -121,10 +121,10 @@ def get_customer(customer_id: int) -> dict:
         db.close()
 
 @tool
-def search_shipping_policy(query:str) -> list[dict]:
+def search_shipping_policy(query: str) -> str:
     """Search company policies and support documentation."""
-
-    return retrieve_policy(query=query, limit=5)
+    results = retrieve_policy(query=query, limit=5)
+    return json.dumps(results, ensure_ascii=False)
 
 tools = [
     get_order,
@@ -192,10 +192,12 @@ def agent_node(
 
     response = llms_with_tools.invoke(
         [
-            SystemMessage(
-                content=SYSTEM_PROMPT
-            ),
-            *messages
+            # SystemMessage(
+            #     content=SYSTEM_PROMPT
+             SystemMessage(content=DECISION_PROMPT),
+            *state["messages"]
+            # ),
+            # *messages
         ]
     )
 
@@ -292,7 +294,8 @@ Return ONLY valid JSON:
     {
       "source": "shipping_policy.pdf",
       "page": 2,
-      "chunk_index": 1
+      "chunk_index": 1,
+      "score":0.9
     }
   ]
 }
@@ -360,8 +363,9 @@ def decision_node(
         "decision": decision,
         "requires_human": decision.requires_human,
         "evidence": [
-            # evidence.model_dump()
-            evidence for evidence in decision.evidence
+            evidence.model_dump()
+            # evidence 
+            for evidence in decision.evidence
         ]
     }
 

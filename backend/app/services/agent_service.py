@@ -61,6 +61,7 @@ def investigate_delayed_order(
             "severity": decision.severity,
             "resolution": decision.resolution,
             "requires_human": decision.requires_human,
+            "evidence": decision.evidence
         },
     )
     # print(decision)

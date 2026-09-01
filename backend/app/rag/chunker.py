@@ -6,12 +6,12 @@ splitter = RecursiveCharacterTextSplitter(
 )
 
 def chunk_documents(documents: list[dict]) -> list[dict]:
-
     chunks = []
 
     for document in documents:
-        for page in documents["pages"]:
-            split_texts = splitter.split_text(document["text"])
+        for page in document["pages"]:
+            page_text = page["text"]
+            split_texts = splitter.split_text(page_text)
 
             for chunk_index, text in enumerate(split_texts):
                 chunks.append(
@@ -20,7 +20,7 @@ def chunk_documents(documents: list[dict]) -> list[dict]:
                         "source": document["source"],
                         "document_type": document["document_type"],
                         "page": page["page"],
-                        "chunk_index": chunk_index
+                        "chunk_index": chunk_index,
                     }
                 )
 

@@ -8,26 +8,16 @@ def load_documents() -> list[dict]:
 
     for path in KNOWLEDGE_DIR.glob("*.pdf"):
         reader = PdfReader(str(path))
-
         pages = []
-
         for page_number, page in enumerate(reader.pages, start=1):
             text = page.extract_text() or ""
-
             if text.strip():
-                pages.append(
-                    {
-                        "page": page_number,
-                        "text": text
-                    }
-                )
+                pages.append({"page": page_number, "text": text})
 
-            documents.append(
-                {
-                    "source": path.name,
-                    "document_type": "policy",
-                    "pages": pages
-                }
-            )
+        documents.append({          # ← moved outside the page loop
+            "source": path.name,
+            "document_type": "policy",
+            "pages": pages
+        })
 
     return documents
