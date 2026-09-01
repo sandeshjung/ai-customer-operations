@@ -1,40 +1,342 @@
-ACME COMMERCE SUPPORT MANUAL
-Version: 1.0
+# Customer Operations Support Manual
 
-1. General Rule
+**Manual ID:** OPS-001
+**Version:** 4.2
+**Effective Date:** January 1, 2026
+**Owner:** Customer Operations
+**Review Frequency:** Quarterly
 
-Support decisions must be based on verified customer, order,
-shipment, and policy information.
+---
 
-2. Missing Information
+## 1. Purpose
 
-If important information is missing, the AI agent should retrieve
-additional information or escalate the case.
+This manual defines how automated and human customer operations systems should investigate customer issues and determine appropriate next actions.
 
-3. High Priority Cases
+The system should prioritize accurate investigation, policy compliance, and clear escalation.
 
-Cases involving serious shipment delays, potentially lost packages,
-or unclear customer-impacting decisions should receive higher
-priority.
+---
 
-4. Human Escalation
+## 2. Investigation Workflow
 
-The AI should escalate when:
+For an operational issue, the agent should generally follow this sequence:
 
-- Required information is unavailable.
-- Policy interpretation is ambiguous.
-- The requested action requires human authorization.
-- The customer situation is unusually complex.
+### Step 1 — Identify the Issue
 
-5. Customer Communication
+Determine the primary issue category:
 
-Messages must be factual, concise, and based on verified
-information.
+* Delivery delay
+* Missing shipment
+* Damaged product
+* Incorrect product
+* Return request
+* Refund request
+* Warranty issue
+* Payment issue
 
-Never invent:
+### Step 2 — Retrieve Relevant Records
 
-- tracking information
-- delivery dates
-- refund approvals
-- carrier actions
-- policy exceptions
+Retrieve available:
+
+* Order information.
+* Shipment information.
+* Customer information.
+* Previous support records when available.
+
+### Step 3 — Determine Whether Policy Applies
+
+If the issue is governed by a company policy, search the policy knowledge base.
+
+The policy knowledge base should be treated as the source of truth for company-specific rules.
+
+### Step 4 — Evaluate the Evidence
+
+Compare the available operational information with the retrieved policy.
+
+The agent must distinguish:
+
+* Known facts.
+* Retrieved policy requirements.
+* Missing information.
+* Recommendations.
+
+### Step 5 — Determine the Next Action
+
+Possible actions include:
+
+* Continue monitoring.
+* Contact carrier.
+* Contact customer.
+* Create support ticket.
+* Request additional information.
+* Escalate to human review.
+* Take no action.
+
+---
+
+## 3. Source-of-Truth Rules
+
+The agent should use the following priority:
+
+1. Current operational database records.
+2. Current carrier information.
+3. Approved company policy documents.
+4. Previous support records.
+5. General model knowledge.
+
+General model knowledge must not override an explicit company policy.
+
+---
+
+## 4. Missing Information
+
+Missing information is itself an operational signal.
+
+Examples:
+
+* Missing tracking number.
+* Missing shipment status.
+* Missing customer information.
+* Missing order record.
+* Conflicting order information.
+
+The agent should not fill missing information using assumptions.
+
+If missing information prevents a reliable decision, escalate.
+
+---
+
+## 5. Contradictory Information
+
+If two sources disagree:
+
+Example:
+
+```text
+Order system:
+Status = Shipped
+
+Shipment system:
+Status = Delivered
+```
+
+The agent should not select one value arbitrarily.
+
+Instead:
+
+1. Identify the conflict.
+2. Determine whether a more authoritative source exists.
+3. If the conflict cannot be resolved, escalate.
+
+---
+
+## 6. Severity Classification
+
+### LOW
+
+Use when:
+
+* Issue is minor.
+* No urgent intervention is required.
+* Required information is available.
+* Normal automated handling is sufficient.
+
+### MEDIUM
+
+Use when:
+
+* Issue requires monitoring.
+* Customer impact exists.
+* A standard operational action is recommended.
+
+### HIGH
+
+Use when:
+
+* Significant customer impact exists.
+* Shipment is substantially delayed.
+* Important operational information is missing.
+* Carrier intervention is required.
+
+### CRITICAL
+
+Use when:
+
+* There is a significant unresolved operational failure.
+* Multiple systems contain conflicting information.
+* The issue may affect multiple customers.
+* Immediate human intervention is required.
+
+---
+
+## 7. Human Escalation
+
+Human review is required when:
+
+* The appropriate action cannot be determined confidently.
+* Policy documents conflict.
+* Operational records conflict.
+* Required information is unavailable.
+* The customer requests an exception.
+* The case involves monetary authorization.
+* The case involves a potentially lost or damaged shipment.
+* The automated agent reaches its maximum tool-call limit.
+
+---
+
+## 8. Customer Communication Rules
+
+Customer messages must be:
+
+* Accurate.
+* Concise.
+* Based on verified information.
+* Clear about next steps.
+
+The agent must not:
+
+* Invent information.
+* Make unsupported promises.
+* Claim that an action was completed when it was only recommended.
+* Guarantee delivery dates.
+* Guarantee refunds.
+* Claim human approval that has not occurred.
+
+---
+
+## 9. Customer Message Structure
+
+When appropriate, a customer message should contain:
+
+1. Acknowledgment of the issue.
+2. Verified current status.
+3. Next step.
+4. Expected follow-up where known.
+
+Example structure:
+
+> We’re sorry for the delay. Our latest shipment information shows that your order is still in transit. We’re reviewing the shipment and will provide an update once additional information is available.
+
+The exact wording should depend on the available evidence.
+
+---
+
+## 10. Tool Usage
+
+The agent should use tools when information is required to make a decision.
+
+Examples:
+
+### Order Tool
+
+Use when:
+
+* Order status is unknown.
+* Customer ID is needed.
+* Product information is required.
+
+### Shipment Tool
+
+Use when:
+
+* Delivery status is unknown.
+* Tracking information is required.
+* Shipment delay needs investigation.
+
+### Customer Tool
+
+Use when:
+
+* Customer identity needs verification.
+* Customer contact information is required by an authorized workflow.
+
+### Policy Search Tool
+
+Use when:
+
+* A company rule is relevant.
+* The correct action depends on a policy threshold.
+* The agent needs to determine eligibility or escalation requirements.
+
+---
+
+## 11. Tool Call Limits
+
+The automated agent should avoid unnecessary tool calls.
+
+If the agent cannot reach a reliable decision within the configured maximum number of tool iterations, it should stop automated investigation and escalate.
+
+The agent must not continue indefinitely.
+
+---
+
+## 12. Policy Retrieval Failure
+
+If a policy search returns no relevant information:
+
+* Do not invent a policy.
+* Do not assume the company follows general industry practice.
+* Determine whether a safe operational action exists.
+* Escalate if policy information is required.
+
+---
+
+## 13. Evidence Requirements
+
+Operational decisions should be supported by evidence.
+
+Evidence may include:
+
+* Order record.
+* Shipment record.
+* Customer record.
+* Retrieved policy document.
+* Carrier status.
+
+The final decision should identify the important evidence used to reach the recommendation.
+
+---
+
+## 14. Automated Action Restrictions
+
+The investigation agent is authorized to:
+
+* Read operational information.
+* Search policies.
+* Classify issues.
+* Recommend actions.
+* Draft messages.
+
+The investigation agent is not authorized to:
+
+* Modify database records.
+* Issue refunds.
+* Modify shipment records.
+* Change customer information.
+* Declare shipments lost.
+* Send external communications without authorization.
+* Override company policy.
+
+---
+
+## 15. Escalation Explanation
+
+When escalating, the agent should provide:
+
+* Issue summary.
+* Severity.
+* Evidence reviewed.
+* Relevant policy.
+* Missing or conflicting information.
+* Recommended human action.
+
+A human operator should be able to understand why escalation occurred without repeating the entire investigation.
+
+---
+
+## 16. Final Decision Principle
+
+The automated operations system should optimize for:
+
+**Accuracy → Policy compliance → Customer clarity → Operational efficiency**
+
+When these goals conflict, the system should prioritize accuracy and policy compliance over automation.

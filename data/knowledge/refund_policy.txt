@@ -1,31 +1,213 @@
-ACME COMMERCE REFUND POLICY
-Version: 1.0
+# Refund and Compensation Policy
 
-1. General Refunds
+**Policy ID:** REF-001
+**Version:** 3.0
+**Effective Date:** January 1, 2026
+**Owner:** Customer Operations
+**Review Frequency:** Quarterly
 
-Refund eligibility depends on the order status and reason for the
-refund request.
+---
 
-2. Delayed Orders
+## 1. Purpose
 
-A delayed shipment does not automatically qualify for a refund.
+This policy defines when customers may qualify for refunds, partial refunds, credits, or other forms of compensation.
 
-The support team must review the order and shipment circumstances
-before approving a refund.
+A delivery delay does not automatically qualify a customer for a refund.
 
-3. Cancelled Orders
+Refund decisions must consider the reason for the request, order status, payment status, applicable return conditions, and any previous compensation.
 
-If an order has not shipped and cancellation is approved, the
-customer may be eligible for a full refund.
+---
 
-4. Delivered Orders
+## 2. Refund Categories
 
-Refund requests for delivered orders require review according to
-the return and refund procedures.
+Refund requests are categorized as:
 
-5. AI Restrictions
+* Order cancellation
+* Delayed delivery
+* Lost shipment
+* Damaged product
+* Incorrect product
+* Product return
+* Duplicate payment
+* Billing error
+* Service failure
 
-The AI agent must not promise a refund unless the applicable policy
-and order information clearly support the action.
+Each category has different eligibility requirements.
 
-When eligibility is unclear, escalate to a human support agent.
+---
+
+## 3. Delayed Delivery
+
+A delayed delivery by itself does not automatically create a refund entitlement.
+
+For delays:
+
+### 0–4 Days Late
+
+No automatic monetary compensation is authorized.
+
+Support may explain the current delivery status and continue monitoring the shipment.
+
+### 5–7 Days Late
+
+The customer may request a review.
+
+Support should:
+
+1. Verify the shipment status.
+2. Determine whether the carrier has provided an exception.
+3. Check whether the order remains deliverable.
+4. Review any previous compensation.
+5. Escalate unusual cases.
+
+A refund must not be promised before eligibility is confirmed.
+
+### More Than 7 Days Late
+
+The case requires human review.
+
+A logistics or customer operations specialist may determine whether the order qualifies for:
+
+* Refund
+* Replacement
+* Store credit
+* Continued shipment monitoring
+
+The automated agent may recommend escalation but may not independently approve a refund.
+
+---
+
+## 4. Lost Shipments
+
+A shipment should not be declared lost solely because it is late.
+
+Evidence that may support a lost-shipment investigation includes:
+
+* Carrier confirmation.
+* Extended absence of tracking movement.
+* Carrier investigation result.
+* Confirmed delivery failure.
+* Internal fulfillment discrepancy.
+
+Once a carrier or authorized operations specialist confirms that a shipment is lost, the customer may become eligible for a refund or replacement depending on the circumstances.
+
+---
+
+## 5. Damaged Products
+
+Customers reporting damaged products should provide sufficient information for investigation.
+
+Depending on the circumstances, support may request:
+
+* Photographs.
+* Order information.
+* Product information.
+* Packaging information.
+* Delivery information.
+
+A damaged-product case may qualify for:
+
+* Replacement
+* Refund
+* Partial refund
+* Store credit
+
+The appropriate resolution depends on the severity of the damage and product eligibility.
+
+---
+
+## 6. Incorrect Products
+
+If the customer receives an incorrect product:
+
+1. Verify the ordered product.
+2. Verify the shipped product.
+3. Determine whether the discrepancy resulted from fulfillment or customer selection.
+4. Escalate when necessary.
+
+Customers who received an incorrect product may qualify for a replacement or refund depending on inventory availability and operational review.
+
+---
+
+## 7. Order Cancellation
+
+Cancellation eligibility depends on fulfillment status.
+
+Orders that have not entered fulfillment may generally be cancelled according to the order cancellation procedure.
+
+Orders already shipped cannot normally be treated as simple cancellations. They may instead need to follow the return or refusal-of-delivery process.
+
+The automated agent must not claim that an order can be cancelled without checking its status.
+
+---
+
+## 8. Duplicate Charges
+
+When a customer reports being charged twice:
+
+1. Verify the order.
+2. Verify the payment records.
+3. Determine whether both charges are completed transactions or whether one is a temporary authorization.
+4. Escalate unresolved discrepancies.
+
+The automated system must not promise a refund before payment status has been verified.
+
+---
+
+## 9. Refund Processing
+
+Once a refund has been approved by an authorized system or employee, processing time depends on the payment method.
+
+Customer support should provide only verified processing information.
+
+Do not promise an exact bank posting date unless supported by the payment system.
+
+---
+
+## 10. Previous Compensation
+
+Before approving or recommending additional compensation, the system should check whether compensation has already been provided for the same incident.
+
+Multiple compensation requests for the same issue require human review.
+
+---
+
+## 11. Automated Agent Restrictions
+
+The automated agent may:
+
+* Explain refund policy.
+* Determine potential eligibility.
+* Recommend human review.
+* Retrieve relevant policy sections.
+* Draft a customer response.
+
+The automated agent may not:
+
+* Approve a refund.
+* Issue monetary compensation.
+* Change payment records.
+* Promise a refund.
+* Guarantee a refund amount.
+
+---
+
+## 12. Escalation
+
+Human review is required when:
+
+* Eligibility is ambiguous.
+* The shipment may be lost.
+* The customer requests an exception.
+* The customer has already received compensation.
+* A refund amount is disputed.
+* Payment records conflict.
+* The order has exceptional circumstances.
+
+---
+
+## 13. Decision Principle
+
+Refund decisions should be based on verified order and payment information together with the applicable policy.
+
+When policy eligibility cannot be established confidently, escalate rather than assume.

@@ -1,53 +1,257 @@
-ACME COMMERCE SHIPPING POLICY
-Version: 1.0
+# Shipping and Delivery Operations Policy
 
-1. Standard Delivery
+**Policy ID:** SHIP-001
+**Version:** 2.1
+**Effective Date:** January 1, 2026
+**Owner:** Logistics Operations
+**Review Frequency:** Quarterly
 
-Standard delivery normally takes 3–5 business days.
+---
 
-2. Delayed Shipments
+## 1. Purpose
 
-An order is considered delayed when the current date is later than
-the expected delivery date.
+This policy defines the operational procedures for monitoring shipments, identifying delayed deliveries, communicating delays to customers, and escalating shipment issues to logistics personnel.
 
-If an order is delayed by more than 48 hours:
+The objective is to ensure that delayed orders are identified consistently and that customers receive accurate information without employees or automated systems making unsupported promises.
 
-- The customer should be notified.
-- The shipment tracking information should be reviewed.
-- If tracking has not updated for more than 48 hours, the carrier
-  should be contacted.
+---
 
-3. Serious Delays
+## 2. Standard Delivery Expectations
 
-If an order is delayed by more than 5 days:
+Orders are assigned an expected delivery date when the shipment is created.
 
-- The case should be treated as high priority.
-- The shipment should be investigated.
-- A support ticket should be created.
-- The customer should be notified.
+The expected delivery date is determined using:
 
-4. Missing Tracking Information
+* Customer delivery location
+* Shipping method
+* Carrier service level
+* Order processing time
+* Warehouse availability
+* Applicable weekends and public holidays
 
-If an order is delayed but has no tracking number:
+The expected delivery date should be treated as the primary reference point for determining whether an order is delayed.
 
-- Do not assume the shipment was lost.
-- Verify the order and shipment records.
-- Escalate the case to a support agent.
+An order is considered delayed when the current date is later than the expected delivery date and the order has not been confirmed as delivered.
 
-5. Lost Packages
+---
 
-A package may be considered potentially lost when:
+## 3. Delay Classification
 
-- The carrier confirms loss, OR
-- Tracking has shown no movement for 7 or more days.
+Shipment delays are classified according to the number of calendar days past the expected delivery date.
 
-The AI agent must not independently declare a package lost without
-carrier confirmation.
+### 0–1 Days Late
 
-6. Customer Communication
+Orders that are between zero and one day late are considered **minor delays**.
 
-Customers should receive accurate information based on verified
-order and shipment data.
+Recommended action:
 
-The system must not invent tracking locations, carrier updates,
-delivery dates, or refund decisions.
+* Continue shipment monitoring.
+* No manual carrier contact is normally required.
+* Customer contact is optional unless the customer has already contacted support.
+
+The system should not automatically issue compensation for a delay of one day or less.
+
+### 2–4 Days Late
+
+Orders delayed between two and four days are considered **moderate delays**.
+
+Recommended action:
+
+* Review the latest shipment status.
+* Verify whether tracking information has been updated within the previous 48 hours.
+* Notify the customer when meaningful tracking information is available.
+* Contact the carrier if the shipment has not received a tracking update for more than 48 hours.
+
+### 5–7 Days Late
+
+Orders delayed between five and seven days are considered **high-priority delays**.
+
+Required actions:
+
+1. Review order information.
+2. Review shipment information.
+3. Verify the tracking number.
+4. Determine the most recent carrier scan.
+5. Check whether the shipment appears stalled.
+6. Contact the carrier when no meaningful tracking movement has occurred.
+7. Notify the customer about the delay.
+8. Create an internal support record when carrier intervention is required.
+
+Orders in this category should receive priority over ordinary delivery-status requests.
+
+### More Than 7 Days Late
+
+Orders delayed by more than seven days require **escalated investigation**.
+
+Required actions:
+
+* Verify order information.
+* Verify customer information.
+* Review the complete available shipment history.
+* Contact the carrier.
+* Determine whether the shipment may be lost, misrouted, or returned.
+* Notify the customer.
+* Create or update a support ticket.
+* Escalate to a human logistics specialist.
+
+The automated system must not independently declare a shipment lost.
+
+---
+
+## 4. Missing Tracking Information
+
+A shipment may occasionally exist without a valid tracking number or without a usable tracking status.
+
+If an order is delayed and both tracking number and shipment status are unavailable:
+
+1. Do not invent or infer a tracking number.
+2. Do not tell the customer that the shipment is moving.
+3. Verify whether a shipment record exists.
+4. Check the order's fulfillment status.
+5. Escalate to logistics if the shipment cannot be verified.
+6. Inform the customer that the shipment requires additional investigation.
+
+Missing tracking information for an order delayed more than five days should normally result in human review.
+
+---
+
+## 5. Tracking Inactivity
+
+A shipment is considered inactive when no meaningful carrier tracking event has occurred for more than 48 hours.
+
+Examples of meaningful tracking events include:
+
+* Package accepted by carrier
+* Package departed facility
+* Package arrived at facility
+* Package transferred to another carrier facility
+* Package out for delivery
+* Delivery attempt
+
+Administrative events that do not indicate physical movement should not necessarily be considered meaningful movement.
+
+When tracking has been inactive for more than 48 hours:
+
+* Review the shipment.
+* Check whether the carrier has reported an exception.
+* Contact the carrier when appropriate.
+* Avoid promising a new delivery date unless the carrier has provided one.
+
+---
+
+## 6. Carrier Exceptions
+
+Carrier exceptions may include:
+
+* Incorrect address
+* Weather disruption
+* Transportation disruption
+* Customs processing
+* Damaged package
+* Recipient unavailable
+* Delivery restriction
+* Sorting error
+* Returned shipment
+
+The system should report the carrier-provided exception rather than attempting to determine the cause independently.
+
+If an exception prevents delivery and requires customer information, customer contact should be recommended.
+
+If the exception indicates potential loss or damage, the issue should be escalated.
+
+---
+
+## 7. Estimated Delivery Dates
+
+Customer support and automated agents must not guarantee delivery on a specific date unless the carrier explicitly confirms the date.
+
+Acceptable:
+
+> "The latest carrier information indicates that the package is currently expected to arrive tomorrow."
+
+Not acceptable:
+
+> "Your package will definitely arrive tomorrow."
+
+If no reliable estimated delivery date exists, the customer should be informed that the shipment is still under investigation.
+
+---
+
+## 8. Customer Communication
+
+Customer messages regarding delayed orders should include:
+
+* Confirmation that the order is delayed.
+* The latest verified shipment information.
+* The next operational step when known.
+* An appropriate expectation for follow-up.
+
+Customer communications must not include:
+
+* Invented tracking information.
+* Unsupported delivery dates.
+* Claims that a carrier has been contacted when no contact occurred.
+* Guarantees of delivery.
+* Compensation promises unless authorized by the refund or compensation policy.
+
+---
+
+## 9. Escalation Rules
+
+Human intervention is required when:
+
+* Shipment information is missing for an order delayed more than five days.
+* An order is delayed more than seven days.
+* The shipment appears potentially lost.
+* The shipment appears damaged.
+* The shipment has contradictory tracking information.
+* The carrier reports an unresolved exception.
+* Customer information is required to resolve a delivery exception.
+* The automated system cannot determine an appropriate operational action.
+
+---
+
+## 10. Automation Restrictions
+
+The automated operations agent may:
+
+* Retrieve order information.
+* Retrieve shipment information.
+* Search company policies.
+* Classify delay severity.
+* Recommend operational actions.
+* Draft customer communications.
+* Recommend carrier contact.
+* Recommend escalation.
+
+The automated operations agent may not:
+
+* Change shipment status.
+* Change delivery dates.
+* Mark a shipment as delivered.
+* Declare a package lost.
+* Promise compensation.
+* Modify customer information.
+* Contact a carrier without an authorized workflow.
+* Send a customer communication without the required approval workflow.
+
+---
+
+## 11. Conflict Resolution
+
+When multiple sources contain shipment information, the system should prioritize:
+
+1. Current carrier tracking information.
+2. Internal shipment records.
+3. Order records.
+4. Historical support records.
+
+If sources conflict and the conflict cannot be resolved automatically, human review is required.
+
+---
+
+## 12. Operational Principle
+
+The system must prefer **verified information and escalation over speculation**.
+
+When sufficient information is unavailable to make a reliable decision, the correct action is to identify the missing information and request human investigation.

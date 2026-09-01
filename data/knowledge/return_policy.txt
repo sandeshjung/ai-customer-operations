@@ -1,27 +1,156 @@
-ACME COMMERCE RETURN POLICY
-Version: 1.0
+# Product Return Policy
 
-1. Return Window
+**Policy ID:** RET-001
+**Version:** 2.4
+**Effective Date:** January 1, 2026
+**Owner:** Customer Experience
+**Review Frequency:** Semiannual
 
-Customers may request a return within 30 days of delivery.
+---
 
-2. Eligibility
+## 1. Purpose
 
-Items must generally be unused and in resalable condition unless
-the return is related to a defective or damaged product.
+This policy defines the requirements for returning purchased products and receiving an eligible refund or replacement.
 
-3. Damaged Items
+---
 
-Customers reporting damaged items should be routed to the support
-process for review.
+## 2. Standard Return Window
 
-4. Late Return Requests
+Eligible products may generally be returned within **30 calendar days of confirmed delivery**.
 
-Requests submitted outside the normal return window require
-human review.
+The return period begins on the date the order is recorded as delivered.
 
-5. AI Restrictions
+For orders with multiple products delivered separately, the return period applies independently to each delivered product.
 
-The AI agent must not approve exceptions to the return policy.
+---
 
-If policy eligibility is unclear, escalate to a human.
+## 3. Return Eligibility
+
+A product may be eligible for return when:
+
+* It was purchased through an authorized sales channel.
+* The return request is within the applicable return period.
+* The product is eligible for return.
+* Required product information can be verified.
+
+Some product categories may have additional restrictions.
+
+---
+
+## 4. Product Condition
+
+Returned products should generally be:
+
+* In reasonable condition.
+* Accompanied by required accessories where applicable.
+* Accompanied by documentation where required.
+* Packaged appropriately for return shipping.
+
+Products that show substantial damage caused after delivery may require additional investigation.
+
+---
+
+## 5. Defective Products
+
+Defective products may be handled under the warranty process rather than the standard return process.
+
+If a customer reports a defect:
+
+1. Verify the product.
+2. Determine whether the issue appears to be a manufacturing defect.
+3. Check warranty eligibility.
+4. Follow the warranty procedure when applicable.
+
+The agent should not automatically classify every product complaint as a warranty claim.
+
+---
+
+## 6. Non-Returnable Products
+
+Certain categories may have return restrictions for operational, legal, hygiene, personalization, or safety reasons.
+
+When a product appears to be restricted:
+
+* Check the applicable product category policy.
+* Do not promise that the item can be returned.
+* Escalate ambiguous cases.
+
+---
+
+## 7. Return Shipping
+
+Responsibility for return shipping may depend on the reason for the return.
+
+Examples include:
+
+* Incorrect product shipped.
+* Defective product.
+* Customer preference.
+* Product not as described.
+* Other approved exception.
+
+The applicable policy should be checked before promising reimbursement of return shipping costs.
+
+---
+
+## 8. Refund After Return
+
+Receiving a returned package does not necessarily mean that a refund has already been approved.
+
+The returned product may require inspection or verification.
+
+Support should distinguish between:
+
+* Return initiated.
+* Return received.
+* Return inspected.
+* Refund approved.
+* Refund processed.
+
+---
+
+## 9. Exceptions
+
+Customers may request an exception when:
+
+* The return window has recently expired.
+* The customer experienced a documented delivery issue.
+* The product has a verified defect.
+* An operational error caused the customer to miss the normal return process.
+
+Exceptions require human review.
+
+---
+
+## 10. Automated Agent Restrictions
+
+The automated agent may explain eligibility requirements and recommend next steps.
+
+It must not:
+
+* Guarantee approval.
+* Override the return window.
+* Approve an exception.
+* Promise reimbursement.
+* Modify return records.
+
+---
+
+## 11. Escalation
+
+Human review is required when:
+
+* The return window has expired.
+* Product eligibility is unclear.
+* A customer requests an exception.
+* Product condition is disputed.
+* A return appears fraudulent or inconsistent.
+* The applicable product category has conflicting rules.
+
+---
+
+## 12. Decision Principle
+
+The system should distinguish between **return eligibility** and **refund approval**.
+
+A customer may be eligible to initiate a return without an immediate refund being guaranteed.

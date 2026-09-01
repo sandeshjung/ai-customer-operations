@@ -1,21 +1,148 @@
-ACME COMMERCE WARRANTY POLICY
-Version: 1.0
+# Product Warranty Policy
 
-1. Warranty Period
+**Policy ID:** WAR-001
+**Version:** 1.8
+**Effective Date:** January 1, 2026
+**Owner:** Product Support
+**Review Frequency:** Annually
 
-Eligible products may have a warranty period specified by their
-product documentation.
+---
 
-2. Defective Products
+## 1. Purpose
 
-Customers reporting defective products should provide the relevant
-order and product information.
+This policy defines how product defects and warranty claims should be evaluated and escalated.
 
-3. Warranty Decisions
+---
 
-The AI system may explain the warranty policy but must not make
-final warranty approval decisions when eligibility is uncertain.
+## 2. Warranty Coverage
 
-4. Escalation
+Warranty coverage depends on:
 
-Unclear warranty cases must be escalated to a human support agent.
+* Product category.
+* Purchase date.
+* Product model.
+* Applicable warranty period.
+* Nature of the reported problem.
+
+The existence of a product problem does not automatically establish warranty eligibility.
+
+---
+
+## 3. Reporting a Defect
+
+When a customer reports a defective product, support should collect:
+
+* Order ID.
+* Product ID.
+* Description of the problem.
+* Date the problem was discovered.
+* Relevant photographs or documentation when required.
+* Troubleshooting information where applicable.
+
+---
+
+## 4. Warranty Investigation
+
+The investigation should determine:
+
+1. Whether the product can be identified.
+2. Whether the purchase can be verified.
+3. Whether the product is within the warranty period.
+4. Whether the reported problem appears consistent with warranty coverage.
+5. Whether additional evidence is required.
+
+---
+
+## 5. Manufacturing Defects
+
+A suspected manufacturing defect should be escalated when the issue cannot be resolved through standard troubleshooting.
+
+Possible resolutions include:
+
+* Replacement.
+* Repair.
+* Refund where authorized.
+* Other approved remedy.
+
+The automated agent should recommend the appropriate workflow but should not independently approve a remedy.
+
+---
+
+## 6. Accidental Damage
+
+Damage caused by accidents, misuse, unauthorized modifications, or improper handling may not qualify for standard warranty coverage.
+
+The automated agent should not make a definitive determination when the cause of damage is unclear.
+
+Such cases should be escalated.
+
+---
+
+## 7. Warranty Expiration
+
+If the purchase date indicates that the applicable warranty period has expired:
+
+* Inform the customer that the warranty may no longer apply.
+* Do not guarantee that the claim will be rejected.
+* Escalate when an exception may apply.
+
+---
+
+## 8. Repeated Failures
+
+Repeated failures of the same product may require elevated review.
+
+If a product has undergone multiple repairs or replacements for the same issue, support should escalate the case to a specialist.
+
+---
+
+## 9. Missing Purchase Information
+
+If the customer cannot provide sufficient information to verify the purchase:
+
+* Search available internal records.
+* Do not invent purchase information.
+* Request additional information when appropriate.
+* Escalate if eligibility cannot be established.
+
+---
+
+## 10. Automated Agent Restrictions
+
+The agent may:
+
+* Gather information.
+* Explain warranty requirements.
+* Search warranty policies.
+* Recommend troubleshooting.
+* Recommend escalation.
+* Draft customer communications.
+
+The agent may not:
+
+* Declare a product defective with certainty.
+* Approve a warranty claim.
+* Promise a replacement.
+* Promise a refund.
+* Override warranty restrictions.
+
+---
+
+## 11. Escalation Rules
+
+Escalate when:
+
+* Warranty eligibility is unclear.
+* Product damage has an uncertain cause.
+* The customer disputes a warranty determination.
+* There are repeated product failures.
+* Purchase information conflicts.
+* The requested remedy requires authorization.
+
+---
+
+## 12. Decision Principle
+
+Warranty decisions must be based on verified purchase information and applicable product rules.
+
+When evidence is insufficient, human review is preferred over unsupported assumptions.
