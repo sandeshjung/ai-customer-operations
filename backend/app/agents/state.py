@@ -22,3 +22,5 @@ class DelayedOrderState(TypedDict):
     requires_human: bool
 
     tool_iterations: int
+
+    evidence = list[dict]

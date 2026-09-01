@@ -1,0 +1,32 @@
+[
+  {
+    "question": "What happens if an order is delayed more than five days?",
+    "expected_sources": [
+      "shipping_policy.pdf"
+    ]
+  },
+  {
+    "question": "Does a delayed shipment automatically qualify for a refund?",
+    "expected_sources": [
+      "refund_policy.pdf"
+    ]
+  },
+  {
+    "question": "How long does a customer have to return an item?",
+    "expected_sources": [
+      "return_policy.pdf"
+    ]
+  },
+  {
+    "question": "What should happen when a product is defective?",
+    "expected_sources": [
+      "warranty_policy.pdf"
+    ]
+  },
+  {
+    "question": "When should an issue be escalated to a human?",
+    "expected_sources": [
+      "support_manual.pdf"
+    ]
+  }
+]

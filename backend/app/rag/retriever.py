@@ -17,17 +17,23 @@ def search_policy(
         limit: int=5,
 ) -> list[dict]:
 
-    results = vector_store.similarity_search(query, k=limit)
+    results = vector_store.similarity_search_with_score(query, k=limit)
 
-    return [
-        {
-            "content": document.page_content,
-            "source": document.metadata.get(
-                "source"
-            ),
-            "chunk_index": document.metadata.get(
-                "chunk_index"
-            )
-        }
-        for document in results
-    ]
+    output = []
+
+    for document, score in results:
+        if score > 0.8:
+            continue
+
+        output.append(
+            {
+                "content": document.page_content,
+                "source": document.metadata.get("source"),
+                "page": document.metadata.get("page"),
+                "chunk_index": document.metadata.get("chunk_index"),
+                "version": document.metadata.get("version"),
+                "score": float(score)
+            }
+        )
+
+    return output

@@ -14,7 +14,7 @@ from app.agents.models import AgentDecision
 from app.agents.state import DelayedOrderState
 from app.ai.client import client
 from app.core.config import settings
-from app.rag.retriever import search_policy
+from app.rag.service import retrieve_policy
 
 from langchain_groq import ChatGroq
 from langchain_core.tools import tool
@@ -124,7 +124,7 @@ def get_customer(customer_id: int) -> dict:
 def search_shipping_policy(query:str) -> list[dict]:
     """Search company policies and support documentation."""
 
-    return search_policy(query=query, limit=5)
+    return retrieve_policy(query=query, limit=5)
 
 tools = [
     get_order,
@@ -278,6 +278,8 @@ def tool_node(
 DECISION_PROMPT = """
 Based on the investigation above, produce the final operational decision.
 
+If policy documents were retrieved, use them as the source of truth.
+
 Return ONLY valid JSON:
 
 {
@@ -285,10 +287,21 @@ Return ONLY valid JSON:
   "resolution": "TRACK_SHIPMENT | CONTACT_CARRIER | CONTACT_CUSTOMER | ESCALATE | NO_ACTION",
   "reasoning": "short explanation",
   "customer_message": "message or null",
-  "requires_human": true
+  "requires_human": true,
+  "evidence": [
+    {
+      "source": "shipping_policy.pdf",
+      "page": 2,
+      "chunk_index": 1
+    }
+  ]
 }
 
-Do not invent information.
+Rules:
+
+- Never invent policy information.
+- Only include evidence that was actually retrieved.
+- If no policy was retrieved, return an empty evidence list.
 """
 
 def decision_node(
@@ -345,7 +358,11 @@ def decision_node(
     return {
         # "decision": decision.model_dump(),
         "decision": decision,
-        "requires_human": decision.requires_human
+        "requires_human": decision.requires_human,
+        "evidence": [
+            # evidence.model_dump()
+            evidence for evidence in decision.evidence
+        ]
     }
 
 

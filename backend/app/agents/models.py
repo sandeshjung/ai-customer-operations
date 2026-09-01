@@ -15,6 +15,11 @@ class DelaySeverity(StrEnum):
     HIGH = "HIGH"
     CRITICAL = "CRITICAL"
 
+class AgentEvidence(BaseModel):
+    source: str
+    page: int | None = None 
+    chunk_index: int | None = None 
+
 class AgentDecision(BaseModel):
     severity: DelaySeverity
 
@@ -30,3 +35,5 @@ class AgentDecision(BaseModel):
     )
 
     requires_human: bool = False
+
+    evidence: list[AgentEvidence] = Field(default_factory=list)
