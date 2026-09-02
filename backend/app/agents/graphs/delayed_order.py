@@ -283,57 +283,30 @@ def decision_node(
 
     start_time = time.perf_counter()
 
-    try:
-        structured_llm = llm.with_structured_output(AgentDecision)
-        raw_decision = structured_llm.invoke(
-            [
-                SystemMessage(content=DECISION_PROMPT),
-                *state["messages"],
-            ]
-        )
-
-        if isinstance(raw_decision, AgentDecision):
-            decision = raw_decision
-        elif isinstance(raw_decision, dict):
-            decision = AgentDecision.model_validate(raw_decision)
-        else:
-            content = getattr(raw_decision, "content", None)
-            if not isinstance(content, str):
-                raise ValueError("Unexpected LLM response format")
-            decision = AgentDecision.model_validate(json.loads(content))
-
-    except Exception as exc:
-        logger.warning(
-            "Structured decision output failed for order_id=%s; falling back to raw JSON parse | error=%s",
-            state["order_id"],
-            exc,
-        )
-
-        response = llm.invoke(
-            [
-                SystemMessage(content=DECISION_PROMPT),
-                *state["messages"],
-            ]
-        )
-
-        content = getattr(response, "content", None)
-        if not isinstance(content, str):
-            raise ValueError("Unexpected LLM response format") from exc
-
-        try:
-            decision_data = json.loads(content)
-        except json.JSONDecodeError as parse_exc:
-            raise ValueError(
-                f"Invalid decision JSON: {content}"
-            ) from parse_exc
-
-        decision = AgentDecision.model_validate(decision_data)
-
-    decision = validate_decision(decision)
+    response = llm.invoke(
+        [
+            SystemMessage(content=DECISION_PROMPT),
+            *state["messages"],
+        ]
+    )
 
     latency_ms = (
         time.perf_counter() - start_time
     ) * 1000
+
+    content = getattr(response, "content", None)
+    if not isinstance(content, str):
+        raise ValueError("Unexpected LLM response format")
+
+    try:
+        decision_data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Invalid decision JSON: {content}"
+        ) from exc
+
+    decision = AgentDecision.model_validate(decision_data)
+    decision = validate_decision(decision)
 
     logger.info(
         "Decision generated | order_id=%s | severity=%s | resolution=%s | requires_human=%s | latency_ms=%.2f | reason=%s",
