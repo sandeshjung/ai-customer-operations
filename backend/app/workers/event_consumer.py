@@ -92,7 +92,7 @@ def consume_events():
             streams={
                 EVENT_STREAM: ">",
             },
-            count=10,
+            count=1,
             block=5000,
         )
 
@@ -162,6 +162,7 @@ def consume_events():
                                 CONSUMER_GROUP,
                                 message_id,
                             )
+                time.sleep(3)
 
                 if not success:
                     print(

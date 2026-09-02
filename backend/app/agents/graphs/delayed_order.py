@@ -15,6 +15,7 @@ from app.agents.state import DelayedOrderState
 from app.ai.client import client
 from app.core.config import settings
 from app.rag.service import retrieve_policy
+from app.agents.guardrails import validate_decision
 
 from langchain_groq import ChatGroq
 from langchain_core.tools import tool
@@ -33,102 +34,70 @@ llm = ChatGroq(
 )
 
 @tool 
-def get_order(order_id: int) -> dict:
+def get_order(order_id: int) -> str:
     """Get order information by order ID."""
 
     logger.info(
         "Calling get_order tool",
-        extra={
-            "order_id": order_id,
-        },
+        extra={"order_id": order_id},
     )
 
     from app.core.database import SessionLocal
-    from app.agents.tools.order_tools import (
-        get_order as db_get_order
-    )
+    from app.agents.tools.order_tools import get_order as db_get_order
 
     db = SessionLocal()
-
     try:
-        result = db_get_order(
-            db,
-            order_id
-        )
-        return result or {
-            "error": "Order not found"
-        }
+        result = db_get_order(db, order_id)
+        return json.dumps(result or {"error": "Order not found"})
     finally:
         db.close()
 
+
 @tool
-def get_shipment(order_id: int) -> dict:
-    """"Get shipment information for an order."""
+def get_shipment(order_id: int) -> str:
+    """Get shipment information for an order."""  # ← fixed: was """" (4 quotes)
 
     logger.info(
         "Calling get_shipment tool",
-        extra={
-            "order_id": order_id,
-        },
+        extra={"order_id": order_id},
     )
     
     from app.core.database import SessionLocal
-    from app.agents.tools.shipment_tools import (
-        get_shipment as db_get_shipment
-    )
+    from app.agents.tools.shipment_tools import get_shipment as db_get_shipment
 
     db = SessionLocal()
-
     try:
-        result = db_get_shipment(
-            db,
-            order_id
-        )
-
-        return result or {
-            "error": "Shipment not found"
-        }
-
+        result = db_get_shipment(db, order_id)
+        return json.dumps(result or {"error": "Shipment not found"})
     finally:
         db.close()
 
+
 @tool
-def get_customer(customer_id: int) -> dict:
+def get_customer(customer_id: int) -> str:
     """Get customer information."""
 
     logger.info(
         "Calling get_customer tool",
-        extra={
-            "customer_id": customer_id,
-        },
+        extra={"customer_id": customer_id},
     )
 
     from app.core.database import SessionLocal
-    from app.agents.tools.customer_tools import (
-        get_customer as db_get_customer,
-    )
+    from app.agents.tools.customer_tools import get_customer as db_get_customer
 
     db = SessionLocal()
-
     try:
-        result = db_get_customer(
-            db,
-            customer_id,
-        )
-
-        return result or {
-            "error": "Customer not found"
-        }
-
+        result = db_get_customer(db, customer_id)
+        return json.dumps(result or {"error": "Customer not found"})
     finally:
         db.close()
+
 
 @tool
 def search_shipping_policy(query: str) -> str:
     """Search company policies and support documentation."""
-    # results = retrieve_policy(query=query, limit=5)
-    # return json.dumps(results, ensure_ascii=False)
-    return retrieve_policy(query=query, limit=5)
+    results = retrieve_policy(query=query, limit=5)
+    return json.dumps(results, ensure_ascii=False)
 
 tools = [
     get_order,
@@ -292,8 +261,7 @@ Return ONLY valid JSON. Do not use markdown code blocks. Do not add explanations
     {
       "source": "shipping_policy.pdf",
       "page": 2,
-      "chunk_index": 1,
-      "score":0.9
+      "chunk_index": 1
     }
   ]
 }
