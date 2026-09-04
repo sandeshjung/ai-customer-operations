@@ -2,7 +2,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from backend.app.models.support_ticket import TicketPriority
+from app.models.support_ticket import TicketPriority, TicketStatus
 
 class ResolutionType(StrEnum):
     TRACK_SHIPMENT = "TRACK_SHIPMENT"
