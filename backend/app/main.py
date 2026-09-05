@@ -6,6 +6,7 @@ from app.core.config import settings
 from fastapi import FastAPI
 from app.core.logging import configure_logging
 from app.api.health import router as health_router
+from app.api.admin import router as admin_router
 
 configure_logging()
 
@@ -22,6 +23,7 @@ app.include_router(orders_router, prefix=settings.API_V1_PREFIX)
 app.include_router(products_router, prefix=settings.API_V1_PREFIX)
 app.include_router(shipments_router, prefix=settings.API_V1_PREFIX)
 app.include_router(health_router, prefix=settings.API_V1_PREFIX)
+app.include_router(admin_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/health")

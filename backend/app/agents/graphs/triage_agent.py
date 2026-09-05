@@ -46,7 +46,7 @@ def triage_node(state: TriageState):
     Current Priority: {ticket['priority']}
 
     CUSTOMER HISTORY:
-    {json.dumps(history, indent=2)}
+    {json.dumps(history, indent=2)[:1000]}
 
     POLICY CONTEXT:
     {state.get('policy_context', 'No policy retrieved')}
@@ -69,6 +69,10 @@ def triage_node(state: TriageState):
             SystemMessage(content=SYSTEM_PROMPT),
             SystemMessage(content=prompt)
         ]
+    )
+    logger.info(
+        "Triage decision | ticket_id=%s | intent=%s | priority=%s | action=%s",
+        state["ticket_id"], decision.intent, decision.priority, decision.action,
     )
     return {"decision": decision}
 

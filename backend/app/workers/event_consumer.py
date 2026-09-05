@@ -20,6 +20,7 @@ from app.agents.tools.order_tools import get_order
 
 from app.services.agent_service import investigate_delayed_order
 from app.services.triage_service import process_ticket
+from app.services.approval_service import create_approval
 
 CONSUMER_GROUP = "customer_operations_workers"
 CONSUMER_NAME = "worker-1"
@@ -61,7 +62,27 @@ def process_event(event: dict) -> None:
             order = get_order(db, data["order_id"])
             customer_id = order.get("customer_id") if order else None
 
-            if customer_id:
+            if not customer_id:
+                logger.warning(
+                    "No customer_id found for order",
+                    extra={"order_id": data["order_id"]},
+                )
+                return
+
+            if decision.requires_human:
+                create_approval(
+                    db=db,
+                    event_id=event["event_id"],
+                    order_id=data["order_id"],
+                    customer_id=customer_id,
+                    agent_name="delayed_order_agent",
+                    decision=decision,
+                )
+                logger.info(
+                    "Human approval required — action paused",
+                    extra={"event_id": event["event_id"], "order_id": data["order_id"]},
+                )
+            else:
                 result = execute_decision(
                     db=db,
                     order_id=data["order_id"],
@@ -69,17 +90,12 @@ def process_event(event: dict) -> None:
                     decision=decision,
                 )
                 logger.info(
-                    "Decision executed",
+                    "Decision executed automatically",
                     extra={
                         "event_id": event["event_id"],
                         "actions": result["actions"],
                         "ticket_id": result.get("ticket_id"),
                     },
-                )
-            else:
-                logger.warning(
-                    "No customer_id found for order",
-                    extra={"order_id": data["order_id"]},
                 )
 
         elif event["event_type"] == "TICKET_CREATED":
@@ -87,10 +103,41 @@ def process_event(event: dict) -> None:
             process_ticket(
                 db=db,
                 ticket_id=data["ticket_id"],
-                event_id=event["event_id"]
+                event_id=event["event_id"],
             )
     finally:
         db.close()
+
+    #         if customer_id:
+    #             result = execute_decision(
+    #                 db=db,
+    #                 order_id=data["order_id"],
+    #                 customer_id=customer_id,
+    #                 decision=decision,
+    #             )
+    #             logger.info(
+    #                 "Decision executed",
+    #                 extra={
+    #                     "event_id": event["event_id"],
+    #                     "actions": result["actions"],
+    #                     "ticket_id": result.get("ticket_id"),
+    #                 },
+    #             )
+    #         else:
+    #             logger.warning(
+    #                 "No customer_id found for order",
+    #                 extra={"order_id": data["order_id"]},
+    #             )
+
+    #     elif event["event_type"] == "TICKET_CREATED":
+    #         data = event["data"]
+    #         process_ticket(
+    #             db=db,
+    #             ticket_id=data["ticket_id"],
+    #             event_id=event["event_id"]
+    #         )
+    # finally:
+    #     db.close()
 
 def consume_events():
     create_consumer_group()
