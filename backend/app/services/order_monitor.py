@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+import time
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -62,6 +63,8 @@ def detect_delayed_orders(db: Session) -> int:
             "1",
             ex=86400,
         )
+
+        time.sleep(5)
 
         published += 1
 

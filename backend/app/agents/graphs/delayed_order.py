@@ -283,7 +283,9 @@ def decision_node(
 
     start_time = time.perf_counter()
 
-    response = llm.invoke(
+    # Use the tool-bound LLM so the model can call tools during decision
+    # generation (some decisions request policy lookups or documents).
+    response = llms_with_tools.invoke(
         [
             SystemMessage(content=DECISION_PROMPT),
             *state["messages"],

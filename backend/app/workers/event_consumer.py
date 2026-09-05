@@ -23,6 +23,7 @@ from app.services.triage_service import process_ticket
 
 CONSUMER_GROUP = "customer_operations_workers"
 CONSUMER_NAME = "worker-1"
+PROCESSING_DELAY_SECONDS = 15
 
 
 def create_consumer_group():
@@ -173,10 +174,12 @@ def consume_events():
                                 CONSUMER_GROUP,
                                 message_id,
                             )
-                time.sleep(3)
+                time.sleep(15)
 
                 if not success:
                     print(
                         f"Event moved to DLQ: "
                         f"{event_id}"
                     )
+
+                time.sleep(PROCESSING_DELAY_SECONDS)
