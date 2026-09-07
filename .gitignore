@@ -43,3 +43,8 @@ data/local/
 
 # Docker
 docker-volumes/
+
+# Evaluation run artifacts (generated, machine-specific)
+backend/evaluation/reports/*.json
+backend/evaluation/reports/*.jsonl
+!backend/evaluation/reports/.gitkeep

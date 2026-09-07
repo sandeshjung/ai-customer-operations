@@ -43,5 +43,95 @@
     "expected_severity": "CRITICAL",
     "expected_resolution": "ESCALATE",
     "expected_requires_human": true
+  },
+  {
+    "order_id": 6,
+    "description": "Order 2 days late, shipment in transit, minor delay",
+    "expected_delivery": "2026-09-03",
+    "shipment_status": "IN_TRANSIT",
+    "expected_severity": "LOW",
+    "expected_resolution": "TRACK_SHIPMENT",
+    "expected_requires_human": false
+  },
+  {
+    "order_id": 7,
+    "description": "Order 10 days late, held at customs (carrier exception)",
+    "expected_delivery": "2026-08-26",
+    "shipment_status": "EXCEPTION",
+    "expected_severity": "HIGH",
+    "expected_resolution": "CONTACT_CARRIER",
+    "expected_requires_human": true
+  },
+  {
+    "order_id": 8,
+    "description": "Order 4 days late, out for delivery today",
+    "expected_delivery": "2026-09-01",
+    "shipment_status": "OUT_FOR_DELIVERY",
+    "expected_severity": "MEDIUM",
+    "expected_resolution": "CONTACT_CUSTOMER",
+    "expected_requires_human": false
+  },
+  {
+    "order_id": 9,
+    "description": "Order 20 days late, shipment lost in transit",
+    "expected_delivery": "2026-08-16",
+    "shipment_status": "LOST_IN_TRANSIT",
+    "expected_severity": "CRITICAL",
+    "expected_resolution": "ESCALATE",
+    "expected_requires_human": true
+  },
+  {
+    "order_id": 10,
+    "description": "Order 1 day late, still within normal grace period",
+    "expected_delivery": "2026-09-04",
+    "shipment_status": "IN_TRANSIT",
+    "expected_severity": "LOW",
+    "expected_resolution": "NO_ACTION",
+    "expected_requires_human": false
+  },
+  {
+    "order_id": 11,
+    "description": "Order 6 days late, never shipped, no shipment record",
+    "expected_delivery": "2026-08-30",
+    "shipment_status": null,
+    "expected_severity": "HIGH",
+    "expected_resolution": "ESCALATE",
+    "expected_requires_human": true
+  },
+  {
+    "order_id": 12,
+    "description": "Order 3 days late, tracking shows repeated in-transit delays",
+    "expected_delivery": "2026-09-02",
+    "shipment_status": "DELAYED_IN_TRANSIT",
+    "expected_severity": "MEDIUM",
+    "expected_resolution": "TRACK_SHIPMENT",
+    "expected_requires_human": false
+  },
+  {
+    "order_id": 13,
+    "description": "Order 45 days late, no shipment record, high-value order",
+    "expected_delivery": "2026-07-22",
+    "shipment_status": null,
+    "expected_severity": "CRITICAL",
+    "expected_resolution": "ESCALATE",
+    "expected_requires_human": true
+  },
+  {
+    "order_id": 14,
+    "description": "Order 2 days late, package returned to sender by carrier",
+    "expected_delivery": "2026-09-03",
+    "shipment_status": "RETURNED_TO_SENDER",
+    "expected_severity": "HIGH",
+    "expected_resolution": "CONTACT_CUSTOMER",
+    "expected_requires_human": true
+  },
+  {
+    "order_id": 15,
+    "description": "Order 8 days late but shipment record shows delivered (false alarm)",
+    "expected_delivery": "2026-08-28",
+    "shipment_status": "DELIVERED",
+    "expected_severity": "LOW",
+    "expected_resolution": "NO_ACTION",
+    "expected_requires_human": false
   }
 ]

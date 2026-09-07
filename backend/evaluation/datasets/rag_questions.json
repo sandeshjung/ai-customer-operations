@@ -28,5 +28,47 @@
     "expected_sources": [
       "support_manual.pdf"
     ]
+  },
+  {
+    "question": "Does a customer need a receipt to request a return?",
+    "expected_sources": [
+      "return_policy.pdf"
+    ]
+  },
+  {
+    "question": "What information should support collect when a customer reports a defective product?",
+    "expected_sources": [
+      "warranty_policy.pdf"
+    ]
+  },
+  {
+    "question": "How is the expected delivery date for a shipment calculated?",
+    "expected_sources": [
+      "shipping_policy.pdf"
+    ]
+  },
+  {
+    "question": "What is the first step an agent should take when investigating a customer issue?",
+    "expected_sources": [
+      "support_manual.pdf"
+    ]
+  },
+  {
+    "question": "Can duplicate payments be refunded?",
+    "expected_sources": [
+      "refund_policy.pdf"
+    ]
+  },
+  {
+    "question": "Does the return period apply separately for orders with multiple products delivered separately?",
+    "expected_sources": [
+      "return_policy.pdf"
+    ]
+  },
+  {
+    "question": "What factors determine whether a product is covered under warranty?",
+    "expected_sources": [
+      "warranty_policy.pdf"
+    ]
   }
 ]

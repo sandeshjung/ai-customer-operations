@@ -43,5 +43,95 @@
     "expected_priority": "MEDIUM",
     "expected_sentiment": "NEUTRAL",
     "expected_action": "ROUTE_TO_AGENT"
+  },
+  {
+    "ticket_id": 6,
+    "subject": "When will my order arrive?",
+    "message": "Just wondering on the estimated delivery date for my order.",
+    "expected_intent": "DELIVERY_DELAY",
+    "expected_priority": "LOW",
+    "expected_sentiment": "NEUTRAL",
+    "expected_action": "AUTO_RESPOND"
+  },
+  {
+    "ticket_id": 7,
+    "subject": "Refund still not received",
+    "message": "I returned my item two weeks ago and I still have not received my refund. This needs to be fixed now.",
+    "expected_intent": "REFUND_REQUEST",
+    "expected_priority": "HIGH",
+    "expected_sentiment": "FRUSTRATED",
+    "expected_action": "ESCALATE"
+  },
+  {
+    "ticket_id": 8,
+    "subject": "Refund instead of exchange?",
+    "message": "Can I get a refund instead of an exchange for this order?",
+    "expected_intent": "REFUND_REQUEST",
+    "expected_priority": "MEDIUM",
+    "expected_sentiment": "NEUTRAL",
+    "expected_action": "ROUTE_TO_AGENT"
+  },
+  {
+    "ticket_id": 9,
+    "subject": "How do I track my order?",
+    "message": "Can you tell me how to track my package online?",
+    "expected_intent": "GENERAL_INQUIRY",
+    "expected_priority": "LOW",
+    "expected_sentiment": "NEUTRAL",
+    "expected_action": "RESOLVE"
+  },
+  {
+    "ticket_id": 10,
+    "subject": "Only received part of my order",
+    "message": "I ordered 3 items but the box only had 2 items in it. Where is the rest of my order?",
+    "expected_intent": "MISSING_PACKAGE",
+    "expected_priority": "HIGH",
+    "expected_sentiment": "NEGATIVE",
+    "expected_action": "ESCALATE"
+  },
+  {
+    "ticket_id": 11,
+    "subject": "Love this product!",
+    "message": "Just wanted to say the quality of this product exceeded my expectations. Thank you!",
+    "expected_intent": "GENERAL_INQUIRY",
+    "expected_priority": "LOW",
+    "expected_sentiment": "POSITIVE",
+    "expected_action": "AUTO_RESPOND"
+  },
+  {
+    "ticket_id": 12,
+    "subject": "Order delayed again",
+    "message": "This is the third time in a row my order has shown up late. I'm losing patience with this.",
+    "expected_intent": "DELIVERY_DELAY",
+    "expected_priority": "HIGH",
+    "expected_sentiment": "FRUSTRATED",
+    "expected_action": "ESCALATE"
+  },
+  {
+    "ticket_id": 13,
+    "subject": "Item arrived broken, need a replacement",
+    "message": "The product arrived shattered inside the box. I need a replacement sent as soon as possible.",
+    "expected_intent": "DAMAGED_ITEM",
+    "expected_priority": "HIGH",
+    "expected_sentiment": "NEGATIVE",
+    "expected_action": "ESCALATE"
+  },
+  {
+    "ticket_id": 14,
+    "subject": "Sizing question",
+    "message": "Does this jacket run true to size or should I size up?",
+    "expected_intent": "GENERAL_INQUIRY",
+    "expected_priority": "LOW",
+    "expected_sentiment": "NEUTRAL",
+    "expected_action": "RESOLVE"
+  },
+  {
+    "ticket_id": 15,
+    "subject": "Return window question",
+    "message": "How many days do I have to return this item after delivery?",
+    "expected_intent": "RETURN_REQUEST",
+    "expected_priority": "LOW",
+    "expected_sentiment": "NEUTRAL",
+    "expected_action": "AUTO_RESPOND"
   }
 ]

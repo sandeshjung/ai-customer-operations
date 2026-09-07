@@ -1,0 +1,1182 @@
+diff --git a/.gitignore b/.gitignore
+index 591defb..aedbe2f 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -42,4 +42,9 @@ temp/
+ data/local/
+ 
+ # Docker
+-docker-volumes/
+\ No newline at end of file
++docker-volumes/
++
++# Evaluation run artifacts (generated, machine-specific)
++backend/evaluation/reports/*.json
++backend/evaluation/reports/*.jsonl
++!backend/evaluation/reports/.gitkeep
+\ No newline at end of file
+diff --git a/Makefile b/Makefile
+index d95669d..5f49d47 100644
+--- a/Makefile
++++ b/Makefile
+@@ -31,6 +31,17 @@ seed:
+ 	PYTHONPATH=backend uv run python backend/scripts/seed_database.py
+ 
+ 
+-.PHONY: evaluate
++.PHONY: evaluate evaluate-quick evaluate-reset
+ evaluate:
+-	PYTHONPATH=backend uv run python backend/evaluation/run_all.py
+\ No newline at end of file
++	PYTHONPATH=backend uv run python backend/evaluation/run_all.py
++
++# Smoke test with only the first 3 scenarios of each dataset — use this
++# first to confirm everything is wired up before spending a full run's
++# worth of free-tier LLM calls.
++evaluate-quick:
++	PYTHONPATH=backend EVAL_LIMIT=3 uv run python backend/evaluation/run_all.py
++
++# Clear checkpoints so the next run re-evaluates every scenario from
++# scratch instead of resuming.
++evaluate-reset:
++	rm -f backend/evaluation/reports/*.checkpoint.jsonl
+\ No newline at end of file
+diff --git a/backend/evaluation/README.md b/backend/evaluation/README.md
+new file mode 100644
+index 0000000..68c0ce4
+--- /dev/null
++++ b/backend/evaluation/README.md
+@@ -0,0 +1,59 @@
++# Evaluation Framework
++
++Measures the delayed-order agent, the ticket triage agent, and the RAG
++retrieval pipeline against small hand-labeled datasets in `datasets/`.
++
++## Running
++
++```bash
++make evaluate            # full run, writes a report to reports/
++make evaluate-quick       # first 3 scenarios of each dataset only (smoke test)
++make evaluate-reset       # clear checkpoints, next run starts fresh
++```
++
++Reports land in `backend/evaluation/reports/eval_run-<timestamp>.json`
++(and `eval_run-latest.json`).
++
++## Working within a free-tier LLM budget
++
++The agent evaluations call a real LLM per scenario (the delayed-order
++agent can make several calls per scenario, since it loops through tool
++calls before producing a decision). On a rate-limited free tier
++(e.g. Groq), running the full dataset can hit 429s well before finishing
++— so the scripts are built to survive that instead of crashing:
++
++- **Pacing** — a delay between scenarios (`EVAL_SLEEP_SECONDS`, default 5s).
++- **Backoff** — on a 429, the specific call is retried with exponential
++  backoff (`EVAL_MAX_RETRIES`, default 4; `EVAL_BACKOFF_SECONDS`, default 20)
++  instead of aborting the whole run.
++- **Checkpointing** — every completed scenario is appended to
++  `reports/<name>.checkpoint.jsonl`. If the run is killed (e.g. daily quota
++  exhausted), re-running skips scenarios already recorded and only spends
++  calls on what's left. Run `make evaluate-reset` to force a clean re-run.
++- **EVAL_LIMIT** — cap how many scenarios run, for a cheap smoke test:
++  `EVAL_LIMIT=3 make evaluate`.
++
++The RAG retrieval eval (`recall@5`, `MRR`, `context relevance`) makes
++**zero** LLM calls — it only uses the local embedding model — so run it as
++often as you like.
++
++## Faithfulness (optional, costs LLM calls)
++
++`retrieval/evaluate_faithfulness.py` asks the LLM to answer each RAG
++question from retrieved context and self-report whether the answer is
++grounded in it. This is a real quality signal but doubles the LLM budget
++of the RAG eval, so it's opt-in:
++
++```bash
++RUN_FAITHFULNESS=1 make evaluate
++```
++
++## Dataset sizes
++
++Currently 15 delayed-order scenarios, 15 triage scenarios, and 12 RAG
++questions — enough to cover every enum value (all severities, all
++resolutions, all ticket intents/sentiments/actions) without burning
++through a free-tier quota. Treat the `run_all.py` gate thresholds as
++smoke-test gates, not statistically rigorous benchmarks, at this sample
++size. Scale the datasets up in `datasets/*.json` once you're on a paid
++tier or a locally-hosted model.
+diff --git a/backend/evaluation/agents/evaluate_delayed_order.py b/backend/evaluation/agents/evaluate_delayed_order.py
+index c697006..3a3d9c7 100644
+--- a/backend/evaluation/agents/evaluate_delayed_order.py
++++ b/backend/evaluation/agents/evaluate_delayed_order.py
+@@ -7,6 +7,12 @@ from langchain_core.messages import HumanMessage
+ from app.agents.graphs.delayed_order import delayed_order_graph
+ from app.agents.state import DelayedOrderState
+ from app.core.logging import configure_logging
++from evaluation.utils import (
++    Checkpoint,
++    apply_eval_limit,
++    paced_sleep,
++    retry_with_backoff,
++)
+ 
+ configure_logging()
+ 
+@@ -14,51 +20,88 @@ DATASET_PATH = Path("backend/evaluation/datasets/delayed_order_scenarios.json")
+ TODAY = date(2026, 9, 5)
+ 
+ 
++def _run_scenario(scenario: dict) -> dict:
++    delay_days = (TODAY - date.fromisoformat(scenario["expected_delivery"])).days
++
++    # Build a realistic message history so the LLM sees the order context
++    initial_message = HumanMessage(
++        content=(
++            f"Investigate delayed order {scenario['order_id']}. "
++            f"Order is {delay_days} days late. "
++            f"Expected delivery was {scenario['expected_delivery']}. "
++            f"Shipment status: {scenario['shipment_status'] or 'no shipment record'}."
++        )
++    )
++
++    state = DelayedOrderState(
++        messages=[initial_message],
++        order_id=scenario["order_id"],
++        order=None,
++        shipment=None,
++        customer=None,
++        delay_days=delay_days,
++        decision=None,
++        requires_human=False,
++        tool_iterations=0,
++        evidence=[],
++    )
++
++    result = retry_with_backoff(
++        lambda: delayed_order_graph.invoke(state),
++        description=f"delayed_order scenario {scenario['order_id']}",
++    )
++    decision = result["decision"]
++
++    return {
++        "severity": decision.severity.value,
++        "resolution": decision.resolution.value,
++        "requires_human": decision.requires_human,
++    }
++
++
+ def evaluate_delayed_order_agent():
+     with open(DATASET_PATH, encoding="utf-8") as f:
+-        scenarios = json.load(f)
++        scenarios = apply_eval_limit(json.load(f))
++
++    checkpoint = Checkpoint("delayed_order")
+ 
+     correct_severity = 0
+     correct_resolution = 0
+     correct_human = 0
+-    total = len(scenarios)
++    completed = 0
++    failed = []
+ 
+     for scenario in scenarios:
+-        delay_days = (TODAY - date.fromisoformat(scenario["expected_delivery"])).days
+-
+-        # Build a realistic message history so the LLM sees the order context
+-        initial_message = HumanMessage(
+-            content=(
+-                f"Investigate delayed order {scenario['order_id']}. "
+-                f"Order is {delay_days} days late. "
+-                f"Expected delivery was {scenario['expected_delivery']}. "
+-                f"Shipment status: {scenario['shipment_status'] or 'no shipment record'}."
++        cached = checkpoint.get(scenario["order_id"])
++        if cached:
++            got = cached["got"]
++            print(f"Scenario: {scenario['description']} (cached)")
++        else:
++            try:
++                got = _run_scenario(scenario)
++            except Exception as exc:
++                print(f"FAIL | {scenario['description']}: {exc}")
++                failed.append({"order_id": scenario["order_id"], "error": str(exc)})
++                paced_sleep()
++                continue
++            checkpoint.record(
++                scenario["order_id"],
++                {
++                    "description": scenario["description"],
++                    "expected": {
++                        "severity": scenario["expected_severity"],
++                        "resolution": scenario["expected_resolution"],
++                        "requires_human": scenario["expected_requires_human"],
++                    },
++                    "got": got,
++                },
+             )
+-        )
+-
+-        state = DelayedOrderState(
+-            messages=[initial_message],
+-            order_id=scenario["order_id"],
+-            order=None,
+-            shipment=None,
+-            customer=None,
+-            delay_days=delay_days,
+-            decision=None,
+-            requires_human=False,
+-            tool_iterations=0,
+-            evidence=[],
+-        )
+-
+-        try:
+-            result = delayed_order_graph.invoke(state)
+-            decision = result["decision"]
+-        except Exception as exc:
+-            print(f"FAIL | {scenario['description']}: {exc}")
+-            continue
++            paced_sleep()
++            print(f"Scenario: {scenario['description']}")
+ 
+-        severity_match = decision.severity.value == scenario["expected_severity"]
+-        resolution_match = decision.resolution.value == scenario["expected_resolution"]
+-        human_match = decision.requires_human == scenario["expected_requires_human"]
++        severity_match = got["severity"] == scenario["expected_severity"]
++        resolution_match = got["resolution"] == scenario["expected_resolution"]
++        human_match = got["requires_human"] == scenario["expected_requires_human"]
+ 
+         if severity_match:
+             correct_severity += 1
+@@ -66,23 +109,39 @@ def evaluate_delayed_order_agent():
+             correct_resolution += 1
+         if human_match:
+             correct_human += 1
++        completed += 1
+ 
+-        print(f"Scenario: {scenario['description']}")
+-        print(f"  Expected: {scenario['expected_severity']} / {scenario['expected_resolution']} / human={scenario['expected_requires_human']}")
+-        print(f"  Got:      {decision.severity.value} / {decision.resolution.value} / human={decision.requires_human}")
+-        print(f"  Match:    severity={severity_match}, resolution={resolution_match}, human={human_match}")
++        print(
++            f"  Expected: {scenario['expected_severity']} / "
++            f"{scenario['expected_resolution']} / human={scenario['expected_requires_human']}"
++        )
++        print(
++            f"  Got:      {got['severity']} / {got['resolution']} / "
++            f"human={got['requires_human']}"
++        )
++        print(
++            f"  Match:    severity={severity_match}, resolution={resolution_match}, "
++            f"human={human_match}"
++        )
+         print("-" * 60)
+ 
+-    print(f"\nSeverity Accuracy:     {correct_severity}/{total} = {correct_severity / total:.1%}")
+-    print(f"Resolution Accuracy:   {correct_resolution}/{total} = {correct_resolution / total:.1%}")
+-    print(f"Human Flag Accuracy:   {correct_human}/{total} = {correct_human / total:.1%}")
++    total = completed or 1
++
++    print(f"\nCompleted: {completed}/{len(scenarios)} (failed: {len(failed)})")
++    print(f"Severity Accuracy:     {correct_severity}/{completed} = {correct_severity / total:.1%}")
++    print(f"Resolution Accuracy:   {correct_resolution}/{completed} = {correct_resolution / total:.1%}")
++    print(f"Escalation Accuracy:   {correct_human}/{completed} = {correct_human / total:.1%}")
+ 
+     return {
++        "total_scenarios": len(scenarios),
++        "completed": completed,
++        "failed": failed,
+         "severity_accuracy": correct_severity / total,
+         "resolution_accuracy": correct_resolution / total,
+         "human_flag_accuracy": correct_human / total,
++        "escalation_accuracy": correct_human / total,
+     }
+ 
+ 
+ if __name__ == "__main__":
+-    evaluate_delayed_order_agent()
+\ No newline at end of file
++    evaluate_delayed_order_agent()
+diff --git a/backend/evaluation/agents/evaluate_triage.py b/backend/evaluation/agents/evaluate_triage.py
+index 9abd5fb..fcd6257 100644
+--- a/backend/evaluation/agents/evaluate_triage.py
++++ b/backend/evaluation/agents/evaluate_triage.py
+@@ -4,70 +4,141 @@ from pathlib import Path
+ from langchain_core.messages import HumanMessage
+ 
+ from app.agents.graphs.triage_agent import triage_graph
++from evaluation.utils import (
++    Checkpoint,
++    apply_eval_limit,
++    paced_sleep,
++    retry_with_backoff,
++)
+ 
+ DATASET_PATH = Path("backend/evaluation/datasets/triage_scenarios.json")
+ 
+ 
++def _run_scenario(scenario: dict) -> dict:
++    ticket_message = HumanMessage(
++        content=(
++            f"Subject: {scenario['subject']}\n"
++            f"Message: {scenario['message']}\n"
++            f"Please triage this support ticket."
++        )
++    )
++
++    result = retry_with_backoff(
++        lambda: triage_graph.invoke(
++            {
++                "ticket_id": scenario["ticket_id"],
++                "ticket": {
++                    "subject": scenario["subject"],
++                    "message": scenario["message"],
++                    "priority": "MEDIUM",
++                },
++                "customer_history": [],
++                "policy_context": "",
++                "messages": [ticket_message],
++            }
++        ),
++        description=f"triage scenario {scenario['ticket_id']}",
++    )
++    decision = result["decision"]
++
++    return {
++        "intent": decision.intent.value,
++        "priority": decision.priority,
++        "sentiment": decision.sentiment.value,
++        "action": decision.action.value,
++        "requires_human": decision.requires_human,
++    }
++
++
+ def evaluate_triage_agent():
+     with open(DATASET_PATH, encoding="utf-8") as f:
+-        scenarios = json.load(f)
++        scenarios = apply_eval_limit(json.load(f))
++
++    checkpoint = Checkpoint("triage")
+ 
+     correct_intent = 0
+     correct_priority = 0
++    correct_sentiment = 0
+     correct_action = 0
+-    total = len(scenarios)
++    completed = 0
++    failed = []
+ 
+     for scenario in scenarios:
+-        # Pass ticket as a message so the LLM sees the context
+-        ticket_message = HumanMessage(
+-            content=(
+-                f"Subject: {scenario['subject']}\n"
+-                f"Message: {scenario['message']}\n"
+-                f"Please triage this support ticket."
++        cached = checkpoint.get(scenario["ticket_id"])
++        if cached:
++            got = cached["got"]
++            print(f"Ticket: {scenario['subject']} (cached)")
++        else:
++            try:
++                got = _run_scenario(scenario)
++            except Exception as exc:
++                print(f"FAIL | {scenario['subject']}: {exc}")
++                failed.append({"ticket_id": scenario["ticket_id"], "error": str(exc)})
++                paced_sleep()
++                continue
++            checkpoint.record(
++                scenario["ticket_id"],
++                {
++                    "subject": scenario["subject"],
++                    "expected": {
++                        "intent": scenario["expected_intent"],
++                        "priority": scenario["expected_priority"],
++                        "sentiment": scenario["expected_sentiment"],
++                        "action": scenario["expected_action"],
++                    },
++                    "got": got,
++                },
+             )
+-        )
+-
+-        result = triage_graph.invoke({
+-            "ticket_id": scenario["ticket_id"],
+-            "ticket": {
+-                "subject": scenario["subject"],
+-                "message": scenario["message"],
+-                "priority": "MEDIUM",
+-            },
+-            "customer_history": [],
+-            "policy_context": "",
+-            "messages": [ticket_message],  # some graphs may use messages
+-        })
++            paced_sleep()
++            print(f"Ticket: {scenario['subject']}")
+ 
+-        decision = result["decision"]
+-
+-        intent_match = decision.intent.value == scenario["expected_intent"]
+-        priority_match = decision.priority == scenario["expected_priority"]
+-        action_match = decision.action.value == scenario["expected_action"]
++        intent_match = got["intent"] == scenario["expected_intent"]
++        priority_match = got["priority"] == scenario["expected_priority"]
++        sentiment_match = got["sentiment"] == scenario["expected_sentiment"]
++        action_match = got["action"] == scenario["expected_action"]
+ 
+         if intent_match:
+             correct_intent += 1
+         if priority_match:
+             correct_priority += 1
++        if sentiment_match:
++            correct_sentiment += 1
+         if action_match:
+             correct_action += 1
++        completed += 1
+ 
+-        print(f"Ticket: {scenario['subject']}")
+-        print(f"  Expected: {scenario['expected_intent']} / {scenario['expected_priority']} / {scenario['expected_action']}")
+-        print(f"  Got:      {decision.intent.value} / {decision.priority} / {decision.action.value}")
+-        print(f"  Match:    intent={intent_match}, priority={priority_match}, action={action_match}")
++        print(
++            f"  Expected: {scenario['expected_intent']} / {scenario['expected_priority']} / "
++            f"{scenario['expected_sentiment']} / {scenario['expected_action']}"
++        )
++        print(
++            f"  Got:      {got['intent']} / {got['priority']} / "
++            f"{got['sentiment']} / {got['action']}"
++        )
++        print(
++            f"  Match:    intent={intent_match}, priority={priority_match}, "
++            f"sentiment={sentiment_match}, action={action_match}"
++        )
+         print("-" * 60)
+ 
+-    print(f"\nIntent Accuracy:   {correct_intent}/{total} = {correct_intent / total:.1%}")
+-    print(f"Priority Accuracy: {correct_priority}/{total} = {correct_priority / total:.1%}")
+-    print(f"Action Accuracy:   {correct_action}/{total} = {correct_action / total:.1%}")
++    total = completed or 1
++
++    print(f"\nCompleted: {completed}/{len(scenarios)} (failed: {len(failed)})")
++    print(f"Intent Accuracy:    {correct_intent}/{completed} = {correct_intent / total:.1%}")
++    print(f"Priority Accuracy:  {correct_priority}/{completed} = {correct_priority / total:.1%}")
++    print(f"Sentiment Accuracy: {correct_sentiment}/{completed} = {correct_sentiment / total:.1%}")
++    print(f"Action Accuracy:    {correct_action}/{completed} = {correct_action / total:.1%}")
+ 
+     return {
++        "total_scenarios": len(scenarios),
++        "completed": completed,
++        "failed": failed,
+         "intent_accuracy": correct_intent / total,
+         "priority_accuracy": correct_priority / total,
+-        "action_action_accuracy": correct_action / total,
++        "sentiment_accuracy": correct_sentiment / total,
++        "action_accuracy": correct_action / total,
+     }
+ 
+ 
+ if __name__ == "__main__":
+-    evaluate_triage_agent()
+\ No newline at end of file
++    evaluate_triage_agent()
+diff --git a/backend/evaluation/datasets/delayed_order_scenarios.json b/backend/evaluation/datasets/delayed_order_scenarios.json
+index 42efcd6..7ca19ee 100644
+--- a/backend/evaluation/datasets/delayed_order_scenarios.json
++++ b/backend/evaluation/datasets/delayed_order_scenarios.json
+@@ -43,5 +43,95 @@
+     "expected_severity": "CRITICAL",
+     "expected_resolution": "ESCALATE",
+     "expected_requires_human": true
++  },
++  {
++    "order_id": 6,
++    "description": "Order 2 days late, shipment in transit, minor delay",
++    "expected_delivery": "2026-09-03",
++    "shipment_status": "IN_TRANSIT",
++    "expected_severity": "LOW",
++    "expected_resolution": "TRACK_SHIPMENT",
++    "expected_requires_human": false
++  },
++  {
++    "order_id": 7,
++    "description": "Order 10 days late, held at customs (carrier exception)",
++    "expected_delivery": "2026-08-26",
++    "shipment_status": "EXCEPTION",
++    "expected_severity": "HIGH",
++    "expected_resolution": "CONTACT_CARRIER",
++    "expected_requires_human": true
++  },
++  {
++    "order_id": 8,
++    "description": "Order 4 days late, out for delivery today",
++    "expected_delivery": "2026-09-01",
++    "shipment_status": "OUT_FOR_DELIVERY",
++    "expected_severity": "MEDIUM",
++    "expected_resolution": "CONTACT_CUSTOMER",
++    "expected_requires_human": false
++  },
++  {
++    "order_id": 9,
++    "description": "Order 20 days late, shipment lost in transit",
++    "expected_delivery": "2026-08-16",
++    "shipment_status": "LOST_IN_TRANSIT",
++    "expected_severity": "CRITICAL",
++    "expected_resolution": "ESCALATE",
++    "expected_requires_human": true
++  },
++  {
++    "order_id": 10,
++    "description": "Order 1 day late, still within normal grace period",
++    "expected_delivery": "2026-09-04",
++    "shipment_status": "IN_TRANSIT",
++    "expected_severity": "LOW",
++    "expected_resolution": "NO_ACTION",
++    "expected_requires_human": false
++  },
++  {
++    "order_id": 11,
++    "description": "Order 6 days late, never shipped, no shipment record",
++    "expected_delivery": "2026-08-30",
++    "shipment_status": null,
++    "expected_severity": "HIGH",
++    "expected_resolution": "ESCALATE",
++    "expected_requires_human": true
++  },
++  {
++    "order_id": 12,
++    "description": "Order 3 days late, tracking shows repeated in-transit delays",
++    "expected_delivery": "2026-09-02",
++    "shipment_status": "DELAYED_IN_TRANSIT",
++    "expected_severity": "MEDIUM",
++    "expected_resolution": "TRACK_SHIPMENT",
++    "expected_requires_human": false
++  },
++  {
++    "order_id": 13,
++    "description": "Order 45 days late, no shipment record, high-value order",
++    "expected_delivery": "2026-07-22",
++    "shipment_status": null,
++    "expected_severity": "CRITICAL",
++    "expected_resolution": "ESCALATE",
++    "expected_requires_human": true
++  },
++  {
++    "order_id": 14,
++    "description": "Order 2 days late, package returned to sender by carrier",
++    "expected_delivery": "2026-09-03",
++    "shipment_status": "RETURNED_TO_SENDER",
++    "expected_severity": "HIGH",
++    "expected_resolution": "CONTACT_CUSTOMER",
++    "expected_requires_human": true
++  },
++  {
++    "order_id": 15,
++    "description": "Order 8 days late but shipment record shows delivered (false alarm)",
++    "expected_delivery": "2026-08-28",
++    "shipment_status": "DELIVERED",
++    "expected_severity": "LOW",
++    "expected_resolution": "NO_ACTION",
++    "expected_requires_human": false
+   }
+ ]
+\ No newline at end of file
+diff --git a/backend/evaluation/datasets/rag_questions.json b/backend/evaluation/datasets/rag_questions.json
+index 3f99375..724b4f4 100644
+--- a/backend/evaluation/datasets/rag_questions.json
++++ b/backend/evaluation/datasets/rag_questions.json
+@@ -28,5 +28,47 @@
+     "expected_sources": [
+       "support_manual.pdf"
+     ]
++  },
++  {
++    "question": "Does a customer need a receipt to request a return?",
++    "expected_sources": [
++      "return_policy.pdf"
++    ]
++  },
++  {
++    "question": "What information should support collect when a customer reports a defective product?",
++    "expected_sources": [
++      "warranty_policy.pdf"
++    ]
++  },
++  {
++    "question": "How is the expected delivery date for a shipment calculated?",
++    "expected_sources": [
++      "shipping_policy.pdf"
++    ]
++  },
++  {
++    "question": "What is the first step an agent should take when investigating a customer issue?",
++    "expected_sources": [
++      "support_manual.pdf"
++    ]
++  },
++  {
++    "question": "Can duplicate payments be refunded?",
++    "expected_sources": [
++      "refund_policy.pdf"
++    ]
++  },
++  {
++    "question": "Does the return period apply separately for orders with multiple products delivered separately?",
++    "expected_sources": [
++      "return_policy.pdf"
++    ]
++  },
++  {
++    "question": "What factors determine whether a product is covered under warranty?",
++    "expected_sources": [
++      "warranty_policy.pdf"
++    ]
+   }
+ ]
+\ No newline at end of file
+diff --git a/backend/evaluation/datasets/triage_scenarios.json b/backend/evaluation/datasets/triage_scenarios.json
+index 93a11bd..d04e193 100644
+--- a/backend/evaluation/datasets/triage_scenarios.json
++++ b/backend/evaluation/datasets/triage_scenarios.json
+@@ -43,5 +43,95 @@
+     "expected_priority": "MEDIUM",
+     "expected_sentiment": "NEUTRAL",
+     "expected_action": "ROUTE_TO_AGENT"
++  },
++  {
++    "ticket_id": 6,
++    "subject": "When will my order arrive?",
++    "message": "Just wondering on the estimated delivery date for my order.",
++    "expected_intent": "DELIVERY_DELAY",
++    "expected_priority": "LOW",
++    "expected_sentiment": "NEUTRAL",
++    "expected_action": "AUTO_RESPOND"
++  },
++  {
++    "ticket_id": 7,
++    "subject": "Refund still not received",
++    "message": "I returned my item two weeks ago and I still have not received my refund. This needs to be fixed now.",
++    "expected_intent": "REFUND_REQUEST",
++    "expected_priority": "HIGH",
++    "expected_sentiment": "FRUSTRATED",
++    "expected_action": "ESCALATE"
++  },
++  {
++    "ticket_id": 8,
++    "subject": "Refund instead of exchange?",
++    "message": "Can I get a refund instead of an exchange for this order?",
++    "expected_intent": "REFUND_REQUEST",
++    "expected_priority": "MEDIUM",
++    "expected_sentiment": "NEUTRAL",
++    "expected_action": "ROUTE_TO_AGENT"
++  },
++  {
++    "ticket_id": 9,
++    "subject": "How do I track my order?",
++    "message": "Can you tell me how to track my package online?",
++    "expected_intent": "GENERAL_INQUIRY",
++    "expected_priority": "LOW",
++    "expected_sentiment": "NEUTRAL",
++    "expected_action": "RESOLVE"
++  },
++  {
++    "ticket_id": 10,
++    "subject": "Only received part of my order",
++    "message": "I ordered 3 items but the box only had 2 items in it. Where is the rest of my order?",
++    "expected_intent": "MISSING_PACKAGE",
++    "expected_priority": "HIGH",
++    "expected_sentiment": "NEGATIVE",
++    "expected_action": "ESCALATE"
++  },
++  {
++    "ticket_id": 11,
++    "subject": "Love this product!",
++    "message": "Just wanted to say the quality of this product exceeded my expectations. Thank you!",
++    "expected_intent": "GENERAL_INQUIRY",
++    "expected_priority": "LOW",
++    "expected_sentiment": "POSITIVE",
++    "expected_action": "AUTO_RESPOND"
++  },
++  {
++    "ticket_id": 12,
++    "subject": "Order delayed again",
++    "message": "This is the third time in a row my order has shown up late. I'm losing patience with this.",
++    "expected_intent": "DELIVERY_DELAY",
++    "expected_priority": "HIGH",
++    "expected_sentiment": "FRUSTRATED",
++    "expected_action": "ESCALATE"
++  },
++  {
++    "ticket_id": 13,
++    "subject": "Item arrived broken, need a replacement",
++    "message": "The product arrived shattered inside the box. I need a replacement sent as soon as possible.",
++    "expected_intent": "DAMAGED_ITEM",
++    "expected_priority": "HIGH",
++    "expected_sentiment": "NEGATIVE",
++    "expected_action": "ESCALATE"
++  },
++  {
++    "ticket_id": 14,
++    "subject": "Sizing question",
++    "message": "Does this jacket run true to size or should I size up?",
++    "expected_intent": "GENERAL_INQUIRY",
++    "expected_priority": "LOW",
++    "expected_sentiment": "NEUTRAL",
++    "expected_action": "RESOLVE"
++  },
++  {
++    "ticket_id": 15,
++    "subject": "Return window question",
++    "message": "How many days do I have to return this item after delivery?",
++    "expected_intent": "RETURN_REQUEST",
++    "expected_priority": "LOW",
++    "expected_sentiment": "NEUTRAL",
++    "expected_action": "AUTO_RESPOND"
+   }
+ ]
+\ No newline at end of file
+diff --git a/backend/evaluation/reports/.gitkeep b/backend/evaluation/reports/.gitkeep
+new file mode 100644
+index 0000000..e69de29
+diff --git a/backend/evaluation/retrieval/evaluate_faithfulness.py b/backend/evaluation/retrieval/evaluate_faithfulness.py
+new file mode 100644
+index 0000000..67ae4b4
+--- /dev/null
++++ b/backend/evaluation/retrieval/evaluate_faithfulness.py
+@@ -0,0 +1,116 @@
++"""
++Optional faithfulness evaluation for the RAG pipeline.
++
++Unlike evaluate_retrieval.py (recall@5 / MRR / context relevance, which are
++free — embeddings only), this one asks the LLM to answer each question from
++the retrieved context and self-report whether the answer is fully grounded
++in it. That's one extra LLM call per question, so it's kept separate and
++opt-in rather than bundled into every run_all.py execution.
++
++Run standalone:
++    PYTHONPATH=backend uv run python backend/evaluation/retrieval/evaluate_faithfulness.py
++
++Or opt into it from run_all.py:
++    RUN_FAITHFULNESS=1 make evaluate
++"""
++
++import json
++from pathlib import Path
++
++from app.ai.client import client
++from app.core.config import settings
++from evaluation.utils import apply_eval_limit, paced_sleep, retry_with_backoff
++
++DATASET_PATH = Path("backend/evaluation/datasets/rag_questions.json")
++
++JUDGE_PROMPT = """You will answer a question using ONLY the context provided below.
++
++Context:
++{context}
++
++Question: {question}
++
++Respond with ONLY valid JSON, no markdown, no extra text:
++{{
++  "answer": "your answer using only the context above",
++  "faithfulness_score": 0.0-1.0,
++  "faithfulness_reasoning": "one short sentence on whether the answer is fully supported by the context"
++}}
++
++faithfulness_score should be 1.0 only if every claim in your answer is
++directly supported by the context, and 0.0 if you had to rely on outside
++knowledge because the context didn't contain the answer.
++"""
++
++
++def _judge(question: str, context: str) -> dict:
++    def _call():
++        response = client.chat.completions.create(
++            model=settings.LLM_MODEL,
++            temperature=0,
++            messages=[
++                {
++                    "role": "user",
++                    "content": JUDGE_PROMPT.format(context=context, question=question),
++                }
++            ],
++        )
++        content = response.choices[0].message.content
++        return json.loads(content)
++
++    return retry_with_backoff(_call, description=f"faithfulness judge: {question[:40]}")
++
++
++def evaluate_faithfulness():
++    from app.rag.service import retrieve_policy
++
++    with open(DATASET_PATH, encoding="utf-8") as f:
++        dataset = apply_eval_limit(json.load(f))
++
++    total_score = 0.0
++    completed = 0
++    failed = []
++
++    for item in dataset:
++        chunks = retrieve_policy(item["question"], limit=3)
++        context = "\n\n".join(c["content"] for c in chunks)
++
++        if not context.strip():
++            print(f"Question: {item['question']}\n  No context retrieved, skipping.")
++            print("-" * 60)
++            continue
++
++        try:
++            result = _judge(item["question"], context)
++        except Exception as exc:
++            print(f"FAIL | {item['question']}: {exc}")
++            failed.append({"question": item["question"], "error": str(exc)})
++            paced_sleep()
++            continue
++
++        score = float(result.get("faithfulness_score", 0.0))
++        total_score += score
++        completed += 1
++
++        print(f"Question: {item['question']}")
++        print(f"  Answer: {result.get('answer', '')[:150]}")
++        print(f"  Faithfulness: {score:.2f} — {result.get('faithfulness_reasoning', '')}")
++        print("-" * 60)
++        paced_sleep()
++
++    total = completed or 1
++    faithfulness = total_score / total
++
++    print(f"\nCompleted: {completed}/{len(dataset)} (failed: {len(failed)})")
++    print(f"Average Faithfulness: {faithfulness:.2%}")
++
++    return {
++        "total_scenarios": len(dataset),
++        "completed": completed,
++        "failed": failed,
++        "faithfulness": faithfulness,
++    }
++
++
++if __name__ == "__main__":
++    evaluate_faithfulness()
+diff --git a/backend/evaluation/retrieval/evaluate_retrieval.py b/backend/evaluation/retrieval/evaluate_retrieval.py
+index 3c2c661..1ec5284 100644
+--- a/backend/evaluation/retrieval/evaluate_retrieval.py
++++ b/backend/evaluation/retrieval/evaluate_retrieval.py
+@@ -13,13 +13,25 @@ def reciprocal_rank(results: list[dict[str, Any]], expected_sources: set[str]) -
+ 
+ 
+ def evaluate():
++    """Retrieval-only evaluation: recall@5, MRR, and context relevance.
++
++    Deliberately makes zero LLM calls — it only exercises the embedding
++    model (local HuggingFace model) and Qdrant, so it's free to run as
++    often as you like even on a rate-limited LLM free tier. Faithfulness
++    (which needs an LLM to judge groundedness) lives in a separate,
++    opt-in script — see evaluate_faithfulness.py.
++    """
+     with open("backend/evaluation/datasets/rag_questions.json", encoding="utf-8") as file:
+         dataset = json.load(file)
+ 
+     correct = 0
+     total_mrr = 0.0
++    total_relevance = 0.0
+ 
+     for item in dataset:
++        # Use the raw vector search (not the hybrid/BM25 blend) here since
++        # we want the actual cosine similarity scores for context relevance,
++        # not a fused rank.
+         results = search_policy(item["question"], limit=5)
+         total_mrr += reciprocal_rank(results, set(item["expected_sources"]))
+         retrieved_sources = {result["source"] for result in results}
+@@ -29,24 +41,35 @@ def evaluate():
+         if hit:
+             correct += 1
+ 
++        # Context relevance: how similar the retrieved chunks are to the
++        # query, on average. A cheap, LLM-free proxy for "did we actually
++        # retrieve relevant context" — high recall with low relevance
++        # scores usually means the similarity threshold is too loose.
++        scores = [r["score"] for r in results if r.get("score") is not None]
++        relevance = sum(scores) / len(scores) if scores else 0.0
++        total_relevance += relevance
++
+         print(f"Question: {item['question']}")
+         print(f"Expected: {expected_sources}")
+         print(f"Retrieved: {retrieved_sources}")
+-        print(f"Hit: {hit}")
++        print(f"Hit: {hit} | Avg similarity: {relevance:.3f}")
+         print("-" * 60)
+ 
+-    recall_at_5 = correct / len(dataset) if dataset else 0
+-    mrr = total_mrr / len(dataset) if dataset else 0.0
++    total = len(dataset) or 1
++    recall_at_5 = correct / total
++    mrr = total_mrr / total
++    context_relevance = total_relevance / total
+ 
+     print(f"Recall@5: {recall_at_5:.2%}")
+     print(f"MRR: {mrr:.3f}")
++    print(f"Context Relevance (avg similarity): {context_relevance:.3f}")
+ 
+-    # ADD THIS RETURN STATEMENT
+     return {
+         "recall_at_5": recall_at_5,
+         "mrr": mrr,
++        "context_relevance": context_relevance,
+     }
+ 
+ 
+ if __name__ == "__main__":
+-    evaluate()
+\ No newline at end of file
++    evaluate()
+diff --git a/backend/evaluation/run_all.py b/backend/evaluation/run_all.py
+index b08f9ed..79be05e 100644
+--- a/backend/evaluation/run_all.py
++++ b/backend/evaluation/run_all.py
+@@ -1,3 +1,4 @@
++import os
+ import sys
+ from pathlib import Path
+ 
+@@ -6,14 +7,29 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
+ from evaluation.retrieval.evaluate_retrieval import evaluate
+ from evaluation.agents.evaluate_delayed_order import evaluate_delayed_order_agent
+ from evaluation.agents.evaluate_triage import evaluate_triage_agent
++from evaluation.utils import write_report
+ 
+ 
+ def main():
+     print("=" * 70)
+-    print("RAG RETRIEVAL EVALUATION")
++    print("RAG RETRIEVAL EVALUATION (free — no LLM calls)")
+     print("=" * 70)
+     retrieval_metrics = evaluate()
+ 
++    faithfulness_metrics = {}
++    if os.getenv("RUN_FAITHFULNESS"):
++        from evaluation.retrieval.evaluate_faithfulness import evaluate_faithfulness
++
++        print("\n" + "=" * 70)
++        print("RAG FAITHFULNESS EVALUATION (opt-in — uses the LLM)")
++        print("=" * 70)
++        faithfulness_metrics = evaluate_faithfulness()
++    else:
++        print(
++            "\nSkipping faithfulness eval (costs extra LLM calls). "
++            "Set RUN_FAITHFULNESS=1 to include it."
++        )
++
+     print("\n" + "=" * 70)
+     print("DELAYED ORDER AGENT EVALUATION")
+     print("=" * 70)
+@@ -28,25 +44,48 @@ def main():
+     print("SUMMARY")
+     print("=" * 70)
+ 
+-    # Gate: fail if any critical metric is below threshold
++    # Gate: fail if any critical metric is below threshold.
++    # Thresholds are intentionally loose given the small (15-scenario)
++    # dataset sizes chosen to stay within a free-tier LLM budget — treat
++    # these as smoke-test gates, not statistically rigorous benchmarks.
+     gates = {
+         "Recall@5": (retrieval_metrics.get("recall_at_5", 0), 0.60),
+         "MRR": (retrieval_metrics.get("mrr", 0), 0.40),
+         "Delay Severity Accuracy": (delay_metrics.get("severity_accuracy", 0), 0.70),
+         "Delay Resolution Accuracy": (delay_metrics.get("resolution_accuracy", 0), 0.70),
++        "Delay Escalation Accuracy": (delay_metrics.get("escalation_accuracy", 0), 0.70),
+         "Triage Intent Accuracy": (triage_metrics.get("intent_accuracy", 0), 0.70),
++        "Triage Sentiment Accuracy": (triage_metrics.get("sentiment_accuracy", 0), 0.60),
+     }
++    if faithfulness_metrics:
++        gates["RAG Faithfulness"] = (faithfulness_metrics.get("faithfulness", 0), 0.70)
+ 
+     all_passed = True
++    gate_results = {}
+     for name, (actual, threshold) in gates.items():
+         status = "PASS" if actual >= threshold else "FAIL"
+         if status == "FAIL":
+             all_passed = False
++        gate_results[name] = {"actual": actual, "threshold": threshold, "status": status}
+         print(f"  {name}: {actual:.2%} (threshold: {threshold:.0%}) [{status}]")
+ 
+     print(f"\n{'ALL GATES PASSED' if all_passed else 'SOME GATES FAILED'}")
++
++    report_path = write_report(
++        "eval_run",
++        {
++            "retrieval": retrieval_metrics,
++            "faithfulness": faithfulness_metrics,
++            "delayed_order": delay_metrics,
++            "triage": triage_metrics,
++            "gates": gate_results,
++            "all_passed": all_passed,
++        },
++    )
++    print(f"\nReport written to {report_path}")
++
+     return 0 if all_passed else 1
+ 
+ 
+ if __name__ == "__main__":
+-    sys.exit(main())
+\ No newline at end of file
++    sys.exit(main())
+diff --git a/backend/evaluation/utils.py b/backend/evaluation/utils.py
+new file mode 100644
+index 0000000..f9bea1b
+--- /dev/null
++++ b/backend/evaluation/utils.py
+@@ -0,0 +1,152 @@
++"""
++Shared helpers for evaluation scripts.
++
++These exist specifically to make evaluation runnable on a rate-limited
++free-tier LLM provider (Groq):
++
++- retry_with_backoff: retries a single LLM/graph call when a 429 /
++  rate-limit error is hit, instead of crashing the whole run.
++- paced_sleep: a small delay between scenarios so we don't hammer the
++  provider's requests-per-minute limit.
++- Checkpoint: append-as-you-go JSONL result log so a run that gets
++  killed partway (e.g. daily quota exhausted) doesn't lose progress.
++  Re-running the same script skips scenarios already recorded.
++
++Env vars (all optional, sensible defaults for a free tier):
++  EVAL_SLEEP_SECONDS   delay between scenarios            (default 5)
++  EVAL_MAX_RETRIES     retries per scenario on rate limit  (default 4)
++  EVAL_BACKOFF_SECONDS base backoff delay, doubles each retry (default 20)
++  EVAL_LIMIT           only run the first N scenarios (default: all)
++"""
++
++import json
++import os
++import time
++from pathlib import Path
++from typing import Any, Callable, TypeVar
++
++from app.core.logging import get_logger
++
++logger = get_logger(__name__)
++
++T = TypeVar("T")
++
++SLEEP_BETWEEN_SCENARIOS = float(os.getenv("EVAL_SLEEP_SECONDS", "5"))
++MAX_RETRIES = int(os.getenv("EVAL_MAX_RETRIES", "4"))
++BASE_BACKOFF_SECONDS = float(os.getenv("EVAL_BACKOFF_SECONDS", "20"))
++EVAL_LIMIT = os.getenv("EVAL_LIMIT")
++
++REPORTS_DIR = Path("backend/evaluation/reports")
++
++
++def _is_rate_limit_error(exc: Exception) -> bool:
++    """Best-effort detection across groq / langchain-groq exception types."""
++    status_code = getattr(exc, "status_code", None)
++    if status_code == 429:
++        return True
++    text = str(exc).lower()
++    return "rate limit" in text or "rate_limit" in text or "429" in text
++
++
++def retry_with_backoff(
++    fn: Callable[[], T],
++    *,
++    description: str,
++    max_retries: int = MAX_RETRIES,
++    base_delay: float = BASE_BACKOFF_SECONDS,
++) -> T:
++    """Call fn(), retrying with exponential backoff only on rate-limit errors.
++
++    Any other exception is raised immediately — we don't want to silently
++    retry on real bugs (bad JSON, validation errors, etc.), only on
++    "provider is throttling us" conditions.
++    """
++    attempt = 0
++    while True:
++        try:
++            return fn()
++        except Exception as exc:
++            if not _is_rate_limit_error(exc) or attempt >= max_retries:
++                raise
++            delay = base_delay * (2**attempt)
++            attempt += 1
++            logger.warning(
++                "Rate limited, backing off | task=%s attempt=%s/%s delay=%.0fs",
++                description,
++                attempt,
++                max_retries,
++                delay,
++            )
++            print(
++                f"  [rate limited] {description} — retry {attempt}/{max_retries} "
++                f"in {delay:.0f}s"
++            )
++            time.sleep(delay)
++
++
++def paced_sleep() -> None:
++    """Small delay between scenarios to stay under requests-per-minute limits."""
++    if SLEEP_BETWEEN_SCENARIOS > 0:
++        time.sleep(SLEEP_BETWEEN_SCENARIOS)
++
++
++def apply_eval_limit(scenarios: list[dict]) -> list[dict]:
++    """Optionally truncate a dataset via EVAL_LIMIT, for cheap smoke tests."""
++    if EVAL_LIMIT:
++        limit = int(EVAL_LIMIT)
++        if limit < len(scenarios):
++            print(f"EVAL_LIMIT={limit} set — running {limit}/{len(scenarios)} scenarios")
++        return scenarios[:limit]
++    return scenarios
++
++
++class Checkpoint:
++    """Append-only JSONL log of per-scenario results, keyed by scenario id.
++
++    Lets an evaluation run resume after being interrupted (e.g. by hitting
++    a daily token/request quota) without re-spending calls on scenarios
++    that already completed successfully.
++    """
++
++    def __init__(self, name: str):
++        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
++        self.path = REPORTS_DIR / f"{name}.checkpoint.jsonl"
++        self._done: dict[str, dict] = {}
++        if self.path.exists():
++            with open(self.path, encoding="utf-8") as f:
++                for line in f:
++                    line = line.strip()
++                    if not line:
++                        continue
++                    record = json.loads(line)
++                    self._done[str(record["id"])] = record
++
++    def get(self, scenario_id) -> dict | None:
++        return self._done.get(str(scenario_id))
++
++    def record(self, scenario_id, result: dict) -> None:
++        entry = {"id": str(scenario_id), **result}
++        self._done[str(scenario_id)] = entry
++        with open(self.path, "a", encoding="utf-8") as f:
++            f.write(json.dumps(entry) + "\n")
++
++    def all_results(self) -> list[dict]:
++        return list(self._done.values())
++
++    def reset(self) -> None:
++        if self.path.exists():
++            self.path.unlink()
++        self._done = {}
++
++
++def write_report(name: str, payload: dict[str, Any]) -> Path:
++    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
++    timestamp = time.strftime("%Y%m%d-%H%M%S")
++    path = REPORTS_DIR / f"{name}-{timestamp}.json"
++    with open(path, "w", encoding="utf-8") as f:
++        json.dump(payload, f, indent=2, default=str)
++    # Also keep a stable "latest" pointer so CI/tools don't need to glob.
++    latest_path = REPORTS_DIR / f"{name}-latest.json"
++    with open(latest_path, "w", encoding="utf-8") as f:
++        json.dump(payload, f, indent=2, default=str)
++    return path
