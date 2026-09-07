@@ -1,0 +1,47 @@
+[
+  {
+    "ticket_id": 1,
+    "subject": "Where is my package?",
+    "message": "I ordered this 2 weeks ago and it hasn't arrived. This is unacceptable.",
+    "expected_intent": "MISSING_PACKAGE",
+    "expected_priority": "HIGH",
+    "expected_sentiment": "FRUSTRATED",
+    "expected_action": "ESCALATE"
+  },
+  {
+    "ticket_id": 2,
+    "subject": "Wrong item received",
+    "message": "I ordered a blue shirt but got a red one. Can I exchange it?",
+    "expected_intent": "WRONG_ITEM",
+    "expected_priority": "MEDIUM",
+    "expected_sentiment": "NEGATIVE",
+    "expected_action": "ROUTE_TO_AGENT"
+  },
+  {
+    "ticket_id": 3,
+    "subject": "Thank you for the fast delivery",
+    "message": "My order arrived a day early. Great service!",
+    "expected_intent": "GENERAL_INQUIRY",
+    "expected_priority": "LOW",
+    "expected_sentiment": "POSITIVE",
+    "expected_action": "AUTO_RESPOND"
+  },
+  {
+    "ticket_id": 4,
+    "subject": "Item damaged during shipping",
+    "message": "The box was crushed and the item inside is broken. I need a refund.",
+    "expected_intent": "DAMAGED_ITEM",
+    "expected_priority": "HIGH",
+    "expected_sentiment": "NEGATIVE",
+    "expected_action": "ESCALATE"
+  },
+  {
+    "ticket_id": 5,
+    "subject": "Return request",
+    "message": "I'd like to return this item. It doesn't fit.",
+    "expected_intent": "RETURN_REQUEST",
+    "expected_priority": "MEDIUM",
+    "expected_sentiment": "NEUTRAL",
+    "expected_action": "ROUTE_TO_AGENT"
+  }
+]

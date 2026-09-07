@@ -29,3 +29,8 @@ check:
 
 seed:
 	PYTHONPATH=backend uv run python backend/scripts/seed_database.py
+
+
+.PHONY: evaluate
+evaluate:
+	PYTHONPATH=backend uv run python backend/evaluation/run_all.py

@@ -1,0 +1,47 @@
+[
+  {
+    "order_id": 1,
+    "description": "Order 3 days late, shipment in transit",
+    "expected_delivery": "2026-09-01",
+    "shipment_status": "IN_TRANSIT",
+    "expected_severity": "LOW",
+    "expected_resolution": "TRACK_SHIPMENT",
+    "expected_requires_human": false
+  },
+  {
+    "order_id": 2,
+    "description": "Order 15 days late, no shipment record",
+    "expected_delivery": "2026-08-20",
+    "shipment_status": null,
+    "expected_severity": "HIGH",
+    "expected_resolution": "ESCALATE",
+    "expected_requires_human": true
+  },
+  {
+    "order_id": 3,
+    "description": "Order 5 days late, shipment exception",
+    "expected_delivery": "2026-08-30",
+    "shipment_status": "EXCEPTION",
+    "expected_severity": "HIGH",
+    "expected_resolution": "CONTACT_CARRIER",
+    "expected_requires_human": true
+  },
+  {
+    "order_id": 4,
+    "description": "Order 1 day late, shipment delivered today",
+    "expected_delivery": "2026-09-03",
+    "shipment_status": "DELIVERED",
+    "expected_severity": "LOW",
+    "expected_resolution": "NO_ACTION",
+    "expected_requires_human": false
+  },
+  {
+    "order_id": 5,
+    "description": "Order 30 days late, VIP customer, no shipment",
+    "expected_delivery": "2026-08-01",
+    "shipment_status": null,
+    "expected_severity": "CRITICAL",
+    "expected_resolution": "ESCALATE",
+    "expected_requires_human": true
+  }
+]

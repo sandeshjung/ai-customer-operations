@@ -1,5 +1,6 @@
 import json 
 import logging
+import re
 import time
 from langchain_core.messages import (
     HumanMessage, 
@@ -292,20 +293,49 @@ def decision_node(
         ]
     )
 
-    latency_ms = (
-        time.perf_counter() - start_time
-    ) * 1000
+    # latency_ms = (
+    #     time.perf_counter() - start_time
+    # ) * 1000
 
-    content = getattr(response, "content", None)
-    if not isinstance(content, str):
-        raise ValueError("Unexpected LLM response format")
+    # content = getattr(response, "content", None)
+    # if not isinstance(content, str):
+    #     raise ValueError("Unexpected LLM response format")
+
+    # try:
+    #     decision_data = json.loads(content)
+    # except json.JSONDecodeError as exc:
+    #     raise ValueError(
+    #         f"Invalid decision JSON: {content}"
+    #     ) from exc
+
+    # decision = AgentDecision.model_validate(decision_data)
+    # structured_llm = llm.with_structured_output(AgentDecision)
+    # decision = structured_llm.invoke(
+    #     [
+    #         SystemMessage(content=DECISION_PROMPT),
+    #         *state["messages"],
+    #     ]
+    # )
+
+    latency_ms = (time.perf_counter() - start_time) * 1000
+    content = response.content.strip()
+
+    # Strip markdown fences
+    if content.startswith("```"):
+        lines = content.splitlines()
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        content = "\n".join(lines).strip()
 
     try:
         decision_data = json.loads(content)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"Invalid decision JSON: {content}"
-        ) from exc
+    except json.JSONDecodeError:
+        match = re.search(r'\{.*\}', content, re.DOTALL)
+        if not match:
+            raise ValueError(f"Invalid decision JSON: {content[:500]}")
+        decision_data = json.loads(match.group())
 
     decision = AgentDecision.model_validate(decision_data)
     decision = validate_decision(decision)

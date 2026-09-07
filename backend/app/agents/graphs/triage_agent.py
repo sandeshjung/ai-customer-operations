@@ -1,23 +1,31 @@
-import json 
+import json
 import logging
+import re
 import time
+
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langchain_groq import ChatGroq
 
 from app.agents.models import TriageDecision
 from app.core.config import settings
-from app.rag.service import retrieve_policy
 
 logger = logging.getLogger(__name__)
-llm = ChatGroq(model=settings.LLM_MODEL, api_key=settings.LLM_API_KEY, temperature=0)
+
+llm = ChatGroq(
+    model=settings.LLM_MODEL,
+    api_key=settings.LLM_API_KEY,
+    temperature=0,
+)
+
 
 class TriageState(dict):
-    ticket_id:int
+    ticket_id: int
     ticket: dict
     customer_history: list[dict]
     policy_context: str
     decision: TriageDecision | None
+
 
 SYSTEM_PROMPT = """
 You are a support ticket triage agent.
@@ -29,52 +37,87 @@ Analyze the ticket and determine:
 4. Action (what should we do?)
 5. Whether human intervention is required
 
-Use search_policy to retrieve relevant company policies.
+Use the provided policy context to ground your decisions.
 Never invent policy rules.
 
-Return ONLY valid JSON matching the required schema.
+You MUST output ONLY valid JSON. No markdown. No explanations. Start with { and end with }.
 """
+
 
 def triage_node(state: TriageState):
     ticket = state["ticket"]
     history = state.get("customer_history", [])
 
     prompt = f"""
-    TICKET:
-    Subject: {ticket['subject']}
-    Message: {ticket['message']}
-    Current Priority: {ticket['priority']}
+TICKET:
+Subject: {ticket['subject']}
+Message: {ticket['message']}
+Current Priority: {ticket['priority']}
 
-    CUSTOMER HISTORY:
-    {json.dumps(history, indent=2)[:1000]}
+CUSTOMER HISTORY:
+{json.dumps(history, indent=2)[:800]}
 
-    POLICY CONTEXT:
-    {state.get('policy_context', 'No policy retrieved')}
+POLICY CONTEXT:
+{state.get('policy_context', 'No policy retrieved')}
 
-    Analyze and return JSON:
-    {{
-    "intent": "MISSING_PACKAGE | DELIVERY_DELAY | DAMAGED_ITEM | WRONG_ITEM | REFUND_REQUEST | RETURN_REQUEST | GENERAL_INQUIRY",
-    "priority": "LOW | MEDIUM | HIGH | CRITICAL",
-    "sentiment": "POSITIVE | NEUTRAL | NEGATIVE | FRUSTRATED",
-    "action": "AUTO_RESPOND | ROUTE_TO_AGENT | ESCALATE | RESOLVE",
-    "reasoning": "short explanation",
-    "requires_human": boolean,
-    "confidence": 0.0 to 1.0
-    }}      
-    """
+Return JSON:
+{{
+  "intent": "MISSING_PACKAGE | DELIVERY_DELAY | DAMAGED_ITEM | WRONG_ITEM | REFUND_REQUEST | RETURN_REQUEST | GENERAL_INQUIRY",
+  "priority": "LOW | MEDIUM | HIGH | CRITICAL",
+  "sentiment": "POSITIVE | NEUTRAL | NEGATIVE | FRUSTRATED",
+  "action": "AUTO_RESPOND | ROUTE_TO_AGENT | ESCALATE | RESOLVE",
+  "reasoning": "short explanation",
+  "requires_human": boolean,
+  "confidence": 0.0 to 1.0
+}}
+"""
 
-    structured_llm = llm.with_structured_output(TriageDecision)
-    decision = structured_llm.invoke(
-        [
-            SystemMessage(content=SYSTEM_PROMPT),
-            SystemMessage(content=prompt)
-        ]
-    )
+    start_time = time.perf_counter()
+    response = llm.invoke([
+        SystemMessage(content=SYSTEM_PROMPT),
+        SystemMessage(content=prompt),
+    ])
+    latency_ms = (time.perf_counter() - start_time) * 1000
+
+    content = response.content.strip()
+
+    # Extract JSON from markdown code blocks if present
+    if content.startswith("```"):
+        lines = content.splitlines()
+        # Remove opening fence
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        # Remove closing fence
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        content = "\n".join(lines).strip()
+
+    # Fallback: extract first JSON object via regex
+    try:
+        decision_data = json.loads(content)
+    except json.JSONDecodeError:
+        match = re.search(r'\{.*\}', content, re.DOTALL)
+        if not match:
+            logger.error(
+                "No JSON found in triage response | content=%s",
+                content[:500],
+            )
+            raise ValueError(f"Triage response is not valid JSON: {content[:500]}")
+        decision_data = json.loads(match.group())
+
+    decision = TriageDecision.model_validate(decision_data)
+
     logger.info(
-        "Triage decision | ticket_id=%s | intent=%s | priority=%s | action=%s",
-        state["ticket_id"], decision.intent, decision.priority, decision.action,
+        "Triage decision | ticket_id=%s | intent=%s | priority=%s | action=%s | latency_ms=%.2f",
+        state["ticket_id"],
+        decision.intent,
+        decision.priority,
+        decision.action,
+        latency_ms,
     )
+
     return {"decision": decision}
+
 
 def build_triage_graph():
     builder = StateGraph(TriageState)
