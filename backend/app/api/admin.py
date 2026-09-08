@@ -18,9 +18,9 @@ def list_pending_approvals(db: Session = Depends(get_db)):
         {
             "id": approval.id,
             "event_id": approval.event_id,
-            "order_id": approval.customer_id,
-            "customer_id": approval.agent_name,
-            "agent_name": approval.decision,
+            "order_id": approval.order_id,
+            "customer_id": approval.customer_id,
+            "agent_name": approval.agent_name,
             "decision": approval.decision,
             "created_at": approval.created_at
         }
