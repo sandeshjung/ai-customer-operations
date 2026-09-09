@@ -9,25 +9,41 @@ export function OrdersSection({ orders, status, error }) {
   );
   const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState({});
+  const [searchId, setSearchId] = useState("");
 
   useEffect(() => {
     setPage(1);
     setExpanded({});
   }, [sorted.length]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const filteredOrders = useMemo(() => {
+    const trimmed = searchId.trim();
+    if (!trimmed) return sorted;
+    const target = Number(trimmed);
+    if (Number.isNaN(target)) return [];
+    return sorted.filter((order) => order.order_id === target || order.customer_id === target);
+  }, [searchId, sorted]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
 
   useEffect(() => {
     setPage((current) => Math.min(current, totalPages));
   }, [totalPages]);
 
-  const visibleOrders = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const visibleOrders = filteredOrders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const toggleExpanded = (orderId) => {
-    setExpanded((current) => ({
-      ...current,
-      [orderId]: !current[orderId],
-    }));
+    setExpanded((current) => {
+      const hasOpen = !!current[orderId];
+      const next = {};
+      Object.keys(current).forEach((key) => {
+        next[key] = false;
+      });
+      if (!hasOpen) {
+        next[orderId] = true;
+      }
+      return next;
+    });
   };
 
   return (
@@ -37,15 +53,28 @@ export function OrdersSection({ orders, status, error }) {
         <span className="count">{status === "ready" ? orders.length : "—"}</span>
       </div>
 
+      {status === "ready" && (
+        <div className="list-toolbar">
+          <input
+            className="search-input"
+            type="search"
+            inputMode="numeric"
+            placeholder="Search order/customer ID"
+            value={searchId}
+            onChange={(e) => setSearchId(e.target.value)}
+          />
+        </div>
+      )}
+
       {status === "loading" && <div className="loading">Loading…</div>}
 
       {status === "error" && <div className="error">Couldn't load delayed orders — {error}</div>}
 
-      {status === "ready" && sorted.length === 0 && (
-        <div className="empty">Nothing delayed right now.</div>
+      {status === "ready" && filteredOrders.length === 0 && (
+        <div className="empty">{searchId ? "No matching delayed order." : "Nothing delayed right now."}</div>
       )}
 
-      {status === "ready" && sorted.length > 0 && (
+      {status === "ready" && filteredOrders.length > 0 && (
         <>
           <table>
             <thead>

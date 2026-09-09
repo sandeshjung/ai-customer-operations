@@ -19,25 +19,41 @@ export function TicketsSection({ tickets, status, error, statusFilter, onStatusF
   );
   const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState({});
+  const [searchId, setSearchId] = useState("");
 
   useEffect(() => {
     setPage(1);
     setExpanded({});
   }, [sorted.length, statusFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const filteredTickets = useMemo(() => {
+    const trimmed = searchId.trim();
+    if (!trimmed) return sorted;
+    const target = Number(trimmed);
+    if (Number.isNaN(target)) return [];
+    return sorted.filter((ticket) => ticket.id === target || ticket.customer_id === target || ticket.order_id === target);
+  }, [searchId, sorted]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredTickets.length / PAGE_SIZE));
 
   useEffect(() => {
     setPage((current) => Math.min(current, totalPages));
   }, [totalPages]);
 
-  const visibleTickets = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const visibleTickets = filteredTickets.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const toggleExpanded = (ticketId) => {
-    setExpanded((current) => ({
-      ...current,
-      [ticketId]: !current[ticketId],
-    }));
+    setExpanded((current) => {
+      const hasOpen = !!current[ticketId];
+      const next = {};
+      Object.keys(current).forEach((key) => {
+        next[key] = false;
+      });
+      if (!hasOpen) {
+        next[ticketId] = true;
+      }
+      return next;
+    });
   };
 
   return (
@@ -57,13 +73,28 @@ export function TicketsSection({ tickets, status, error, statusFilter, onStatusF
         </select>
       </div>
 
+      {status === "ready" && (
+        <div className="list-toolbar">
+          <input
+            className="search-input"
+            type="search"
+            inputMode="numeric"
+            placeholder="Search ticket/order/customer ID"
+            value={searchId}
+            onChange={(e) => setSearchId(e.target.value)}
+          />
+        </div>
+      )}
+
       {status === "loading" && <div className="loading">Loading…</div>}
 
       {status === "error" && <div className="error">Couldn't load tickets — {error}</div>}
 
-      {status === "ready" && tickets.length === 0 && <div className="empty">No tickets yet.</div>}
+      {status === "ready" && filteredTickets.length === 0 && (
+        <div className="empty">{searchId ? "No matching tickets." : "No tickets yet."}</div>
+      )}
 
-      {status === "ready" && tickets.length > 0 && (
+      {status === "ready" && filteredTickets.length > 0 && (
         <>
           <table>
             <thead>

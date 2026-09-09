@@ -128,6 +128,27 @@ section {
   font-family: "IBM Plex Mono", monospace;
 }
 
+.list-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.search-input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 7px 10px;
+  min-width: 220px;
+  font-size: 12px;
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
 .collapse-toggle,
 .page-button {
   background: transparent;
