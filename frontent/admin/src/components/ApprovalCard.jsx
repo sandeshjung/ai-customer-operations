@@ -1,4 +1,4 @@
-import { act, useState } from "react";
+import { useState } from "react";
 import { relativeTime } from "../format";
 import { Badge } from "./Badge";
 

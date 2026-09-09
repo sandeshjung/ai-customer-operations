@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { Chevron } from "./Chevron";
 
 const PAGE_SIZE = 10;
 
@@ -53,29 +54,34 @@ export function OrdersSection({ orders, status, error }) {
         <span className="count">{status === "ready" ? orders.length : "—"}</span>
       </div>
 
-      {status === "ready" && (
-        <div className="list-toolbar">
-          <input
-            className="search-input"
-            type="search"
-            inputMode="numeric"
-            placeholder="Search order/customer ID"
-            value={searchId}
-            onChange={(e) => setSearchId(e.target.value)}
-          />
-        </div>
-      )}
-
       {status === "loading" && <div className="loading">Loading…</div>}
 
       {status === "error" && <div className="error">Couldn't load delayed orders — {error}</div>}
 
-      {status === "ready" && filteredOrders.length === 0 && (
-        <div className="empty">{searchId ? "No matching delayed order." : "Nothing delayed right now."}</div>
+      {status === "ready" && filteredOrders.length === 0 && !searchId && (
+        <div className="empty">Nothing delayed right now.</div>
       )}
 
-      {status === "ready" && filteredOrders.length > 0 && (
-        <>
+      {status === "ready" && (filteredOrders.length > 0 || searchId) && (
+        <div className="panel">
+          <div className="list-toolbar">
+            <input
+              className="search-input"
+              type="search"
+              inputMode="numeric"
+              placeholder="Search by order or customer ID"
+              value={searchId}
+              onChange={(e) => setSearchId(e.target.value)}
+            />
+          </div>
+
+          {filteredOrders.length === 0 ? (
+            <div className="empty" style={{ border: "none", borderRadius: 0 }}>
+              No matching delayed order.
+            </div>
+          ) : (
+          <>
+          <div className="table-scroll">
           <table>
             <thead>
               <tr>
@@ -85,7 +91,7 @@ export function OrdersSection({ orders, status, error }) {
                 <th>Delay</th>
                 <th>Shipment status</th>
                 <th>Tracking</th>
-                <th>Details</th>
+                <th className="col-details" aria-hidden="true"></th>
               </tr>
             </thead>
             <tbody>
@@ -104,9 +110,11 @@ export function OrdersSection({ orders, status, error }) {
                         <button
                           className="collapse-toggle"
                           type="button"
+                          aria-expanded={isExpanded}
+                          aria-label={isExpanded ? "Hide details" : "View details"}
                           onClick={() => toggleExpanded(o.order_id)}
                         >
-                          {isExpanded ? "Hide" : "View"}
+                          <Chevron />
                         </button>
                       </td>
                     </tr>
@@ -139,6 +147,7 @@ export function OrdersSection({ orders, status, error }) {
               })}
             </tbody>
           </table>
+          </div>
 
           {totalPages > 1 && (
             <div className="pagination" aria-label="Delayed orders pagination">
@@ -165,7 +174,9 @@ export function OrdersSection({ orders, status, error }) {
               </button>
             </div>
           )}
-        </>
+          </>
+          )}
+        </div>
       )}
     </section>
   );

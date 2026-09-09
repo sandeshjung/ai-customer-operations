@@ -91,7 +91,12 @@ export default function App() {
                 <div className="sub">Approvals, delayed orders, and support tickets</div>
             </div>
             <div className="conn">
-                <span className={`dot ${connState}`}></span>
+                <span className="conn-status">
+                  <span className={`dot ${connState}`}></span>
+                  {connState === "ok" && "Connected"}
+                  {connState === "err" && "Can't reach API"}
+                  {connState === "pending" && "Connecting…"}
+                </span>
                 <input 
                 className="mono"
                 spellCheck={false}

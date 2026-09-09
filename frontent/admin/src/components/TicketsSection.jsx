@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Badge } from "./Badge";
+import { Chevron } from "./Chevron";
 import { relativeTime } from "../format";
 
 const PAGE_SIZE = 10;
@@ -73,29 +74,34 @@ export function TicketsSection({ tickets, status, error, statusFilter, onStatusF
         </select>
       </div>
 
-      {status === "ready" && (
-        <div className="list-toolbar">
-          <input
-            className="search-input"
-            type="search"
-            inputMode="numeric"
-            placeholder="Search ticket/order/customer ID"
-            value={searchId}
-            onChange={(e) => setSearchId(e.target.value)}
-          />
-        </div>
-      )}
-
       {status === "loading" && <div className="loading">Loading…</div>}
 
       {status === "error" && <div className="error">Couldn't load tickets — {error}</div>}
 
-      {status === "ready" && filteredTickets.length === 0 && (
-        <div className="empty">{searchId ? "No matching tickets." : "No tickets yet."}</div>
+      {status === "ready" && filteredTickets.length === 0 && !searchId && (
+        <div className="empty">No tickets yet.</div>
       )}
 
-      {status === "ready" && filteredTickets.length > 0 && (
-        <>
+      {status === "ready" && (filteredTickets.length > 0 || searchId) && (
+        <div className="panel">
+          <div className="list-toolbar">
+            <input
+              className="search-input"
+              type="search"
+              inputMode="numeric"
+              placeholder="Search by ticket, order, or customer"
+              value={searchId}
+              onChange={(e) => setSearchId(e.target.value)}
+            />
+          </div>
+
+          {filteredTickets.length === 0 ? (
+            <div className="empty" style={{ border: "none", borderRadius: 0 }}>
+              No matching tickets.
+            </div>
+          ) : (
+          <>
+          <div className="table-scroll">
           <table>
             <thead>
               <tr>
@@ -106,7 +112,7 @@ export function TicketsSection({ tickets, status, error, statusFilter, onStatusF
                 <th>Priority</th>
                 <th>Status</th>
                 <th>Created</th>
-                <th>Details</th>
+                <th className="col-details" aria-hidden="true"></th>
               </tr>
             </thead>
             <tbody>
@@ -130,9 +136,11 @@ export function TicketsSection({ tickets, status, error, statusFilter, onStatusF
                         <button
                           className="collapse-toggle"
                           type="button"
+                          aria-expanded={isExpanded}
+                          aria-label={isExpanded ? "Hide details" : "View details"}
                           onClick={() => toggleExpanded(t.id)}
                         >
-                          {isExpanded ? "Hide" : "View"}
+                          <Chevron />
                         </button>
                       </td>
                     </tr>
@@ -165,6 +173,7 @@ export function TicketsSection({ tickets, status, error, statusFilter, onStatusF
               })}
             </tbody>
           </table>
+          </div>
 
           {totalPages > 1 && (
             <div className="pagination" aria-label="Tickets pagination">
@@ -191,7 +200,9 @@ export function TicketsSection({ tickets, status, error, statusFilter, onStatusF
               </button>
             </div>
           )}
-        </>
+          </>
+          )}
+        </div>
       )}
     </section>
   );
