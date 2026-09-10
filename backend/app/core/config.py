@@ -29,6 +29,15 @@ class Settings(BaseSettings):
     LLM_API_KEY: str | None = None
     LLM_MODEL: str = "llama-3.1-8b-instant"
 
+    OTEL_ENABLED: bool = True
+    OTEL_SERVICE_NAME: str = "ai-customer-operations"
+    # Default points at the local Jaeger container from docker-compose.
+    # Swap to a Langfuse OTLP endpoint (+ OTEL_EXPORTER_OTLP_HEADERS for
+    # auth) without touching any instrumentation code.
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4318"
+    OTEL_EXPORTER_OTLP_HEADERS: str | None = None
+    JAEGER_UI_URL: str = "http://localhost:16686"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

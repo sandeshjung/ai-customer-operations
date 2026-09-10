@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { relativeTime } from "../format";
 import { Badge } from "./Badge";
+import { jaegerTraceUrl } from "../api";
 
 export function ApprovalCard({ approval, onReview }) {
     const [pending, setPending] = useState(false);
     const decision = approval.decision || {};
     const severity = decision.severity || "-";
+    const traceUrl = jaegerTraceUrl(decision.trace_id);
 
     async function handleReview(action) {
         setPending(true);
@@ -26,6 +28,11 @@ export function ApprovalCard({ approval, onReview }) {
                   <span className="mono">customer #{approval.customer_id}</span>
                   <span>{approval.agent_name}</span>
                   <span>{relativeTime(approval.created_at)}</span>
+                  {traceUrl && (
+                    <a className="trace-link" href={traceUrl} target="_blank" rel="noreferrer">
+                      View trace ↗
+                    </a>
+                  )}
                 </div>
               </div>
         

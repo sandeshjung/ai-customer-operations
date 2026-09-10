@@ -9,6 +9,7 @@ from langchain_groq import ChatGroq
 
 from app.agents.models import TriageDecision
 from app.core.config import settings
+from app.core.tracing import current_trace_id, traced
 
 logger = logging.getLogger(__name__)
 
@@ -73,10 +74,21 @@ Return JSON:
 """
 
     start_time = time.perf_counter()
-    response = llm.invoke([
-        SystemMessage(content=SYSTEM_PROMPT),
-        SystemMessage(content=prompt),
-    ])
+    with traced(
+        "llm.triage",
+        tracer_name="triage_agent",
+        ticket_id=state["ticket_id"],
+        model=settings.LLM_MODEL,
+    ) as span:
+        response = llm.invoke([
+            SystemMessage(content=SYSTEM_PROMPT),
+            SystemMessage(content=prompt),
+        ])
+        usage = getattr(response, "usage_metadata", None)
+        if usage:
+            span.set_attribute("llm.input_tokens", usage.get("input_tokens", 0))
+            span.set_attribute("llm.output_tokens", usage.get("output_tokens", 0))
+            span.set_attribute("llm.total_tokens", usage.get("total_tokens", 0))
     latency_ms = (time.perf_counter() - start_time) * 1000
 
     content = response.content.strip()
@@ -106,14 +118,16 @@ Return JSON:
         decision_data = json.loads(match.group())
 
     decision = TriageDecision.model_validate(decision_data)
+    decision.trace_id = current_trace_id()
 
     logger.info(
-        "Triage decision | ticket_id=%s | intent=%s | priority=%s | action=%s | latency_ms=%.2f",
+        "Triage decision | ticket_id=%s | intent=%s | priority=%s | action=%s | latency_ms=%.2f | trace_id=%s",
         state["ticket_id"],
         decision.intent,
         decision.priority,
         decision.action,
         latency_ms,
+        decision.trace_id,
     )
 
     return {"decision": decision}

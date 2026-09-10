@@ -33,6 +33,9 @@ dependencies = [
     "sentence-transformers>=6.0.0",
     "sqlalchemy>=2.0.52",
     "uvicorn[standard]>=0.52.4",
+    "opentelemetry-api>=1.38.0",
+    "opentelemetry-sdk>=1.38.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.38.0",
 ]
 
 [project.scripts]

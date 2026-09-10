@@ -15,6 +15,7 @@ from app.agents.models import AgentDecision
 from app.agents.state import DelayedOrderState
 from app.ai.client import client
 from app.core.config import settings
+from app.core.tracing import current_trace_id, traced
 from app.rag.service import retrieve_policy
 from app.agents.guardrails import validate_decision
 
@@ -46,12 +47,14 @@ def get_order(order_id: int) -> str:
     from app.core.database import SessionLocal
     from app.agents.tools.order_tools import get_order as db_get_order
 
-    db = SessionLocal()
-    try:
-        result = db_get_order(db, order_id)
-        return json.dumps(result or {"error": "Order not found"})
-    finally:
-        db.close()
+    with traced("tool.get_order", tracer_name="delayed_order_agent", order_id=order_id) as span:
+        db = SessionLocal()
+        try:
+            result = db_get_order(db, order_id)
+            span.set_attribute("found", result is not None)
+            return json.dumps(result or {"error": "Order not found"})
+        finally:
+            db.close()
 
 
 @tool
@@ -66,12 +69,14 @@ def get_shipment(order_id: int) -> str:
     from app.core.database import SessionLocal
     from app.agents.tools.shipment_tools import get_shipment as db_get_shipment
 
-    db = SessionLocal()
-    try:
-        result = db_get_shipment(db, order_id)
-        return json.dumps(result or {"error": "Shipment not found"})
-    finally:
-        db.close()
+    with traced("tool.get_shipment", tracer_name="delayed_order_agent", order_id=order_id) as span:
+        db = SessionLocal()
+        try:
+            result = db_get_shipment(db, order_id)
+            span.set_attribute("found", result is not None)
+            return json.dumps(result or {"error": "Shipment not found"})
+        finally:
+            db.close()
 
 
 @tool
@@ -86,19 +91,23 @@ def get_customer(customer_id: int) -> str:
     from app.core.database import SessionLocal
     from app.agents.tools.customer_tools import get_customer as db_get_customer
 
-    db = SessionLocal()
-    try:
-        result = db_get_customer(db, customer_id)
-        return json.dumps(result or {"error": "Customer not found"})
-    finally:
-        db.close()
+    with traced("tool.get_customer", tracer_name="delayed_order_agent", customer_id=customer_id) as span:
+        db = SessionLocal()
+        try:
+            result = db_get_customer(db, customer_id)
+            span.set_attribute("found", result is not None)
+            return json.dumps(result or {"error": "Customer not found"})
+        finally:
+            db.close()
 
 
 @tool
 def search_shipping_policy(query: str) -> str:
     """Search company policies and support documentation."""
-    results = retrieve_policy(query=query, limit=5)
-    return json.dumps(results, ensure_ascii=False)
+    with traced("tool.search_shipping_policy", tracer_name="delayed_order_agent", query=query[:200]) as span:
+        results = retrieve_policy(query=query, limit=5)
+        span.set_attribute("result_count", len(results))
+        return json.dumps(results, ensure_ascii=False)
 
 tools = [
     get_order,
@@ -164,10 +173,27 @@ def agent_node(
 
     start_time = time.perf_counter()
 
-    response = llms_with_tools.invoke([
-        SystemMessage(content=SYSTEM_PROMPT),   # ← tells LLM to investigate using tools
-        *state["messages"]
-    ])
+    with traced(
+        "llm.agent_step",
+        tracer_name="delayed_order_agent",
+        order_id=state["order_id"],
+        tool_iteration=state["tool_iterations"],
+        model=settings.LLM_MODEL,
+    ) as span:
+        response = llms_with_tools.invoke([
+            SystemMessage(content=SYSTEM_PROMPT),   # ← tells LLM to investigate using tools
+            *state["messages"]
+        ])
+
+        tool_calls = getattr(response, "tool_calls", [])
+        span.set_attribute("tool_calls_count", len(tool_calls))
+        if tool_calls:
+            span.set_attribute("tool_calls", ",".join(tc["name"] for tc in tool_calls))
+        usage = getattr(response, "usage_metadata", None)
+        if usage:
+            span.set_attribute("llm.input_tokens", usage.get("input_tokens", 0))
+            span.set_attribute("llm.output_tokens", usage.get("output_tokens", 0))
+            span.set_attribute("llm.total_tokens", usage.get("total_tokens", 0))
 
     latency_ms = (
         time.perf_counter() - start_time
@@ -231,8 +257,16 @@ def tool_node(
                 }
             ]
         }
-    tool_executor = ToolNode(tools)
-    result = tool_executor.invoke(state)
+    tool_calls = getattr(state["messages"][-1], "tool_calls", []) or []
+    with traced(
+        "tools.execute_batch",
+        tracer_name="delayed_order_agent",
+        order_id=state["order_id"],
+        iteration=current_iterations + 1,
+        tool_names=",".join(tc["name"] for tc in tool_calls) if tool_calls else "",
+    ):
+        tool_executor = ToolNode(tools)
+        result = tool_executor.invoke(state)
 
     logger.info(
         "Tools completed | order_id=%s | iteration=%s",
@@ -286,12 +320,23 @@ def decision_node(
 
     # Use the tool-bound LLM so the model can call tools during decision
     # generation (some decisions request policy lookups or documents).
-    response = llms_with_tools.invoke(
-        [
-            SystemMessage(content=DECISION_PROMPT),
-            *state["messages"],
-        ]
-    )
+    with traced(
+        "llm.decision",
+        tracer_name="delayed_order_agent",
+        order_id=state["order_id"],
+        model=settings.LLM_MODEL,
+    ) as span:
+        response = llms_with_tools.invoke(
+            [
+                SystemMessage(content=DECISION_PROMPT),
+                *state["messages"],
+            ]
+        )
+        usage = getattr(response, "usage_metadata", None)
+        if usage:
+            span.set_attribute("llm.input_tokens", usage.get("input_tokens", 0))
+            span.set_attribute("llm.output_tokens", usage.get("output_tokens", 0))
+            span.set_attribute("llm.total_tokens", usage.get("total_tokens", 0))
 
     # latency_ms = (
     #     time.perf_counter() - start_time
@@ -339,15 +384,17 @@ def decision_node(
 
     decision = AgentDecision.model_validate(decision_data)
     decision = validate_decision(decision)
+    decision.trace_id = current_trace_id()
 
     logger.info(
-        "Decision generated | order_id=%s | severity=%s | resolution=%s | requires_human=%s | latency_ms=%.2f | reason=%s",
+        "Decision generated | order_id=%s | severity=%s | resolution=%s | requires_human=%s | latency_ms=%.2f | reason=%s | trace_id=%s",
         state["order_id"],
         decision.severity,
         decision.resolution,
         decision.requires_human,
         latency_ms,
         decision.reasoning,
+        decision.trace_id,
     )
 
     return {

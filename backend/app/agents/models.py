@@ -40,6 +40,11 @@ class AgentDecision(BaseModel):
 
     evidence: list[AgentEvidence] = Field(default_factory=list)
 
+    trace_id: str | None = Field(
+        default=None,
+        description="OpenTelemetry trace id for this decision, for observability lookups.",
+    )
+
 
 class TicketIntent(StrEnum):
     MISSING_PACKAGE = "MISSING_PACKAGE"
@@ -70,3 +75,7 @@ class TriageDecision(BaseModel):
     reasoning: str
     requires_human: bool = False
     confidence: float = Field(ge=0.0, le=1.0)
+    trace_id: str | None = Field(
+        default=None,
+        description="OpenTelemetry trace id for this decision, for observability lookups.",
+    )

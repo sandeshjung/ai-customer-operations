@@ -1,4 +1,5 @@
 const DEFAULT_API_BASE = "http://localhost:8000/api/v1";
+const DEFAULT_JAEGER_UI = "http://localhost:16686";
 
 export function getApiBase() {
   return (localStorage.getItem("adminApiBase") || DEFAULT_API_BASE).replace(/\/$/, "");
@@ -6,6 +7,12 @@ export function getApiBase() {
 
 export function setApiBase(value) {
   localStorage.setItem("adminApiBase", value.trim());
+}
+
+export function jaegerTraceUrl(traceId) {
+  if (!traceId) return null;
+  const base = (localStorage.getItem("adminJaegerUrl") || DEFAULT_JAEGER_UI).replace(/\/$/, "");
+  return `${base}/trace/${traceId}`;
 }
 
 export function getReviewerName() {

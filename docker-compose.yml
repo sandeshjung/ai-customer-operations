@@ -45,6 +45,16 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: customer-operations-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686" # UI — http://localhost:16686
+      - "4318:4318" # OTLP HTTP receiver
+
 volumes:
   postgres_data:
   redis_data:

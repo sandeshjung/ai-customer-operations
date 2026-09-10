@@ -279,6 +279,19 @@ select.filter {
   align-items: center;
 }
 
+.trace-link {
+  color: var(--teal);
+  text-decoration: none;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  border: 1px solid color-mix(in srgb, var(--teal) 40%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 2px 7px;
+}
+.trace-link:hover {
+  background: color-mix(in srgb, var(--teal) 12%, transparent);
+}
+
 .approval-reasoning {
   margin: 11px 0 4px;
   font-size: 13px;

@@ -7,10 +7,12 @@ from app.core.config import settings
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.logging import configure_logging
+from app.core.tracing import setup_tracing
 from app.api.health import router as health_router
 from app.api.admin import router as admin_router
 
 configure_logging()
+setup_tracing()
 
 
 app = FastAPI(
