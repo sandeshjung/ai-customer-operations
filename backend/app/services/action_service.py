@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.agents.models import AgentDecision, DelaySeverity, ResolutionType
 from app.core.logging import get_logger
+from app.core.tracing import inject_trace_context
 from app.events.publisher import publish_event
 from app.events.schemas import Event
 from app.events.types import EventType
@@ -68,7 +69,10 @@ def execute_decision(
     if ticket is not None:
         db.refresh(ticket)
 
-        # Publish event so Triage Agent can pick it up
+        # Publish event so Triage Agent can pick it up. trace_context lets
+        # the consumer continue this same trace instead of starting a new
+        # one — call inject_trace_context() here, while the span for this
+        # request/event is still the active one, not later in the consumer.
         event = Event(
             event_id=str(uuid4()),
             event_type=EventType.TICKET_CREATED,
@@ -82,6 +86,7 @@ def execute_decision(
                 "message": ticket.message,
                 "priority": ticket.priority,
             },
+            trace_context=inject_trace_context(),
         )
         publish_event(event)
 

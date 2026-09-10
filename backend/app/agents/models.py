@@ -44,6 +44,13 @@ class AgentDecision(BaseModel):
         default=None,
         description="OpenTelemetry trace id for this decision, for observability lookups.",
     )
+    trace_context: dict[str, str] | None = Field(
+        default=None,
+        description="W3C traceparent carrier for the root span of this decision's "
+        "trace. Stored so a later, temporally-disjoint action (e.g. a human "
+        "approving this decision) can Link back to the original investigation "
+        "trace instead of just referencing its id.",
+    )
 
 
 class TicketIntent(StrEnum):

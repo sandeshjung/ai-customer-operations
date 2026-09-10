@@ -21,7 +21,7 @@ from app.agents.tools.order_tools import get_order
 from app.services.agent_service import investigate_delayed_order
 from app.services.triage_service import process_ticket
 from app.services.approval_service import create_approval
-from app.core.tracing import traced
+from app.core.tracing import extract_trace_context, traced
 
 CONSUMER_GROUP = "customer_operations_workers"
 CONSUMER_NAME = "worker-1"
@@ -55,6 +55,7 @@ def process_event(event: dict) -> None:
             tracer_name="event_consumer",
             event_id=event["event_id"],
             event_type=event["event_type"],
+            parent_context=extract_trace_context(event.get("trace_context")),
         ):
             if event["event_type"] == "ORDER_DELAYED":
                 data = event["data"]

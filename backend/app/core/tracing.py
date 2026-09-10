@@ -30,6 +30,7 @@ import logging
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.propagate import extract, inject
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -97,15 +98,19 @@ class traced:
             span.set_attribute("severity", decision.severity)
     """
 
-    def __init__(self, name: str, tracer_name: str = "app", **attributes):
+    def __init__(self, name: str, tracer_name: str = "app", parent_context=None, links=None, **attributes):
         self._tracer = get_tracer(tracer_name)
         self._name = name
         self._attributes = {k: v for k, v in attributes.items() if v is not None}
+        self._parent_context = parent_context
+        self._links = links or []
         self._span_cm = None
         self.span = None
 
     def __enter__(self):
-        self._span_cm = self._tracer.start_as_current_span(self._name)
+        self._span_cm = self._tracer.start_as_current_span(
+            self._name, context=self._parent_context, links=self._links
+        )
         self.span = self._span_cm.__enter__()
         for key, value in self._attributes.items():
             self.span.set_attribute(key, value)
@@ -125,3 +130,51 @@ def current_trace_id() -> str | None:
     if not context.is_valid:
         return None
     return format(context.trace_id, "032x")
+
+
+def inject_trace_context() -> dict[str, str]:
+    """Capture the current span as a W3C traceparent, to carry across a
+    process boundary (e.g. a Redis event payload). Call this right before
+    publishing an event, while the originating span is still active.
+
+    Returns an empty dict if tracing is disabled or no span is active —
+    callers should treat a missing/empty carrier as "start a fresh trace",
+    never as an error.
+    """
+    carrier: dict[str, str] = {}
+    inject(carrier)
+    return carrier
+
+
+def extract_trace_context(carrier: dict[str, str] | None):
+    """Rebuild a parent context from a carrier produced by
+    inject_trace_context(). Pass the result as `parent_context=` to
+    `traced(...)` when starting the span that consumes the event, so it
+    continues the original trace instead of starting a new one.
+
+    Safe to call with None/empty/malformed input — falls back to
+    OTel's own empty context, which makes the next span a fresh root
+    rather than raising.
+    """
+    return extract(carrier or {})
+
+
+def link_from_carrier(carrier: dict[str, str] | None) -> trace.Link | None:
+    """Build an OTel Link pointing at the span captured in `carrier`.
+
+    Use this instead of `parent_context=` when the original span is no
+    longer live — e.g. a human approves a decision minutes or hours
+    after the agent's trace already finished and exported. You can't
+    retroactively parent a new span under an already-closed one, but a
+    Link records "this new trace is related to that finished one",
+    which Jaeger/Langfuse/Tempo all render as a cross-trace reference.
+
+    Returns None (rather than raising) for missing/malformed carriers,
+    so callers can do `links=[l] if l else []` unconditionally.
+    """
+    if not carrier:
+        return None
+    span_context = trace.get_current_span(extract(carrier)).get_span_context()
+    if not span_context.is_valid:
+        return None
+    return trace.Link(span_context)

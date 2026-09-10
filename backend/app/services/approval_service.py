@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.agents.models import AgentDecision
 from app.core.logging import get_logger
+from app.core.tracing import link_from_carrier, traced
 from app.models.human_approval import ApprovalStatus, HumanApproval
 from app.services.action_service import execute_decision
 
@@ -64,12 +65,26 @@ def approve(db: Session, approval_id: int, reviewer: str, notes: str | None = No
 
     # reconstruct decision and execute
     decision = AgentDecision.model_validate(approval.decision)
-    result = execute_decision(
-        db=db,
-        order_id=approval.order_id,
-        customer_id=approval.customer_id,
-        decision=decision
-    )
+
+    # The original investigation's trace is long finished by the time a
+    # human gets to this — Link to it rather than trying to parent under
+    # a span that no longer exists.
+    original_trace_link = link_from_carrier(decision.trace_context)
+
+    with traced(
+        "human_approval.execute",
+        tracer_name="approval_service",
+        links=[original_trace_link] if original_trace_link else None,
+        approval_id=approval_id,
+        reviewer=reviewer,
+        original_trace_id=decision.trace_id,
+    ):
+        result = execute_decision(
+            db=db,
+            order_id=approval.order_id,
+            customer_id=approval.customer_id,
+            decision=decision
+        )
 
     db.commit()
 
@@ -78,7 +93,13 @@ def approve(db: Session, approval_id: int, reviewer: str, notes: str | None = No
         extra={
             "approval_id": approval_id,
             "reviewer": reviewer,
-            "ticket_id": result.get("ticket_id")
+            "ticket_id": result.get("ticket_id"),
+            "actions": result.get("actions"),
+            "severity": decision.severity,
+            "resolution": decision.resolution,
+            "reasoning": decision.reasoning,
+            "requires_human": decision.requires_human,
+            "trace_id": decision.trace_id,
         }
     )
     return approval, result
@@ -94,10 +115,20 @@ def reject(db: Session, approval_id: int, reviewer: str, notes: str | None = Non
     approval.reviewer_notes = notes
     db.commit()
 
+    decision = AgentDecision.model_validate(approval.decision)
+
     logger.info(
         "Approval rejected",
         extra={
             "approval_id": approval_id,
-            "reviewer": reviewer
+            "reviewer": reviewer,
+            "notes": notes,
+            "severity": decision.severity,
+            "resolution": decision.resolution,
+            "reasoning": decision.reasoning,
+            "requires_human": decision.requires_human,
+            "trace_id": decision.trace_id,
         }
     )
+
+    return approval
