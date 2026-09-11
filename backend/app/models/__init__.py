@@ -6,6 +6,7 @@ from app.models.product import Product
 from app.models.shipment import Shipment
 from app.models.support_ticket import SupportTicket
 from app.models.agent_execution import AgentExecution
+from app.models.human_approval import HumanApproval
 
 __all__ = [
     "Base",
@@ -15,5 +16,6 @@ __all__ = [
     "Product",
     "Shipment",
     "SupportTicket",
-    "AgentExecution"
+    "AgentExecution",
+    "HumanApproval"
 ]
