@@ -56,8 +56,22 @@ def process_ticket(db, ticket_id: int, event_id: str):
                 "HIGH": TicketPriority.HIGH,
                 "CRITICAL": TicketPriority.CRITICAL,
             }
+            # Severity rank, not alphabetical order: the priority column is
+            # a plain String(30) (not a real SQL enum), so anything loaded
+            # fresh from the DB comes back as a bare str with no .value —
+            # TicketPriority(...) normalizes that. Comparing .value strings
+            # directly was also wrong on its own terms: alphabetically
+            # "LOW" > "HIGH" and "MEDIUM" > "CRITICAL", which is backwards
+            # from actual severity.
+            priority_rank = {
+                TicketPriority.LOW: 0,
+                TicketPriority.MEDIUM: 1,
+                TicketPriority.HIGH: 2,
+                TicketPriority.CRITICAL: 3,
+            }
             triage_priority = priority_map.get(decision.priority)
-            if triage_priority and triage_priority.value > db_ticket.priority.value:
+            current_priority = TicketPriority(db_ticket.priority)
+            if triage_priority and priority_rank[triage_priority] > priority_rank[current_priority]:
                 db_ticket.priority = triage_priority.value
 
             # Auto resolve simple cases
