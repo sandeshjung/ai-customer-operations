@@ -25,7 +25,7 @@ def _make_customer_and_order(db_session) -> tuple[Customer, Order]:
     db_session.refresh(customer)
 
     order = Order(customer_id=customer.id, total_amount=42, expected_delivery=None)
-    db_session.add(Order)
+    db_session.add(order)
     db_session.commit()
     db_session.refresh(order)
 
