@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from app.agents.models import AgentDecision
 from app.models.customer import Customer
+from app.models.notification import Notification
 from app.models.order import Order
 from app.models.support_ticket import SupportTicket, TicketStatus
 from app.services import action_service
@@ -22,16 +23,18 @@ def _make_customer_and_order(db_session) -> tuple[Customer, Order]:
 
     return customer, order
 
+
 def _decision(**overrides) -> AgentDecision:
     fields = {
         "severity": "HIGH",
         "resolution": "ESCALATE",
         "reasoning": "Shipment has not moved in 10 days.",
-        "customer_message": "We're sorry for the delay.",
+        "customer_message": None,
         "requires_human": True,
     }
     fields.update(overrides)
     return AgentDecision(**fields)
+
 
 class TestExecuteDecisionEscalate:
     def test_creates_ticket_and_publishes_event(self, db_session):
@@ -58,13 +61,14 @@ class TestExecuteDecisionEscalate:
         assert published_event.data["ticket_id"] == ticket.id
         assert hasattr(published_event, "trace_context")
 
+
 class TestExecuteDecisionContactCustomer:
     def test_creates_ticket_with_customer_message(self, db_session):
         customer, order = _make_customer_and_order(db_session)
         decision = _decision(
             resolution="CONTACT_CUSTOMER",
             severity="MEDIUM",
-            customer_message="Your order is running a bit behind schedule."
+            customer_message="Your order is running a bit behind schedule.",
         )
 
         with patch.object(action_service, "publish_event"):
@@ -82,7 +86,7 @@ class TestExecuteDecisionContactCustomer:
             resolution="CONTACT_CUSTOMER",
             severity="MEDIUM",
             customer_message=None,
-            reasoning="Delay confirmed via carrier tracking."
+            reasoning="Delay confirmed via carrier tracking.",
         )
 
         with patch.object(action_service, "publish_event"):
@@ -93,17 +97,15 @@ class TestExecuteDecisionContactCustomer:
         ticket = db_session.get(SupportTicket, result["ticket_id"])
         assert ticket.message == "Delay confirmed via carrier tracking."
 
-class TestExecuteDecisionNoTicketBranches:
-    """TRACK_SHIPMENT and CONTACT_CARRIER are currently TODO stubs — they
-    don't call a carrier API, they just log that something happened. These
-    tests document that current (limited) behavior: no ticket, no event,
-    just an action label. If a real carrier integration gets added later,
-    these tests should start failing here, which is exactly the point —
-    it means someone needs to come update this test to match the new
-    (real) behavior instead of the gap going unnoticed.
-    """
 
-    def test_track_shipment_creates_no_ticket(self, db_session):
+class TestExecuteDecisionTrackShipment:
+    """TRACK_SHIPMENT has no real carrier API integrated. Rather than a
+    silent no-op that just logs "shipment_tracked" as if something
+    happened, it now creates a real internal follow-up ticket — and,
+    importantly, does NOT publish a triage event, since there's no
+    customer message here for the triage agent to classify."""
+
+    def test_creates_internal_ticket_without_triaging(self, db_session):
         customer, order = _make_customer_and_order(db_session)
         decision = _decision(resolution="TRACK_SHIPMENT", severity="LOW", requires_human=False)
 
@@ -112,11 +114,18 @@ class TestExecuteDecisionNoTicketBranches:
                 db=db_session, order_id=order.id, customer_id=customer.id, decision=decision
             )
 
-        assert result["actions"] == ["shipment_tracked"]
-        assert result["ticket_id"] is None
+        assert result["actions"] == ["shipment_tracking_ticket_created"]
+        assert result["ticket_id"] is not None
+
+        ticket = db_session.get(SupportTicket, result["ticket_id"])
+        assert "track shipment" in ticket.subject.lower()
+        assert ticket.status == TicketStatus.OPEN
+
         mock_publish.assert_not_called()
 
-    def test_contact_carrier_creates_no_ticket(self, db_session):
+
+class TestExecuteDecisionContactCarrier:
+    def test_creates_internal_ticket_without_triaging(self, db_session):
         customer, order = _make_customer_and_order(db_session)
         decision = _decision(resolution="CONTACT_CARRIER", severity="HIGH", requires_human=True)
 
@@ -125,11 +134,17 @@ class TestExecuteDecisionNoTicketBranches:
                 db=db_session, order_id=order.id, customer_id=customer.id, decision=decision
             )
 
-        assert result["actions"] == ["carrier_contacted"]
-        assert result["ticket_id"] is None
+        assert result["actions"] == ["carrier_contact_ticket_created"]
+        assert result["ticket_id"] is not None
+
+        ticket = db_session.get(SupportTicket, result["ticket_id"])
+        assert "contact carrier" in ticket.subject.lower()
+
         mock_publish.assert_not_called()
 
-    def test_no_action_records_no_action_taken(self, db_session):
+
+class TestExecuteDecisionNoAction:
+    def test_records_no_action_taken_and_creates_no_ticket(self, db_session):
         customer, order = _make_customer_and_order(db_session)
         decision = _decision(resolution="NO_ACTION", severity="LOW", requires_human=False)
 
@@ -141,3 +156,63 @@ class TestExecuteDecisionNoTicketBranches:
         assert result["actions"] == ["no_action_taken"]
         assert result["ticket_id"] is None
         mock_publish.assert_not_called()
+
+
+class TestCustomerNotification:
+    """A customer_message triggers a notification regardless of which
+    resolution branch fired — the two are independent decisions the
+    agent makes (what to do internally vs. whether to tell the
+    customer)."""
+
+    def test_sends_notification_when_customer_message_present(self, db_session):
+        customer, order = _make_customer_and_order(db_session)
+        decision = _decision(
+            resolution="TRACK_SHIPMENT",
+            customer_message="We're keeping an eye on your shipment.",
+        )
+
+        with patch.object(action_service, "publish_event"):
+            result = action_service.execute_decision(
+                db=db_session, order_id=order.id, customer_id=customer.id, decision=decision
+            )
+
+        assert "customer_notified" in result["actions"]
+        notifications = db_session.query(Notification).filter_by(customer_id=customer.id).all()
+        assert len(notifications) == 1
+        assert notifications[0].content == "We're keeping an eye on your shipment."
+        assert notifications[0].status == "SENT"
+        assert notifications[0].recipient == customer.email
+
+    def test_no_notification_when_no_customer_message(self, db_session):
+        customer, order = _make_customer_and_order(db_session)
+        decision = _decision(resolution="NO_ACTION", customer_message=None)
+
+        with patch.object(action_service, "publish_event"):
+            result = action_service.execute_decision(
+                db=db_session, order_id=order.id, customer_id=customer.id, decision=decision
+            )
+
+        assert "customer_notified" not in result["actions"]
+        assert db_session.query(Notification).filter_by(customer_id=customer.id).count() == 0
+
+    def test_notification_failure_does_not_break_execution(self, db_session):
+        customer, order = _make_customer_and_order(db_session)
+        decision = _decision(resolution="NO_ACTION", customer_message="Hello!")
+
+        from app.services import notification_service
+
+        def _raise(*args, **kwargs):
+            raise RuntimeError("smtp down")
+
+        with (
+            patch.object(action_service, "publish_event"),
+            patch.dict(notification_service._BACKENDS, {"log": _raise}),
+        ):
+            result = action_service.execute_decision(
+                db=db_session, order_id=order.id, customer_id=customer.id, decision=decision
+            )
+
+        assert "customer_notification_failed" in result["actions"]
+        notification = db_session.query(Notification).filter_by(customer_id=customer.id).one()
+        assert notification.status == "FAILED"
+        assert notification.error == "smtp down"

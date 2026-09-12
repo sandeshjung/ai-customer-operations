@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     OTEL_EXPORTER_OTLP_HEADERS: str | None = None
     JAEGER_UI_URL: str = "http://localhost:16686"
 
+    NOTIFICATION_BACKEND: str = "log"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
