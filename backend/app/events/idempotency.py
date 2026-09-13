@@ -18,3 +18,18 @@ def mark_event_processed(
         "1",
         ex=ttl_seconds
     )
+
+
+def try_claim_event(event_id: str, ttl_seconds: int = 86400) -> bool:
+    return bool(
+        redis_client.set(
+            f"{IDEMPOTENCY_PREFIX}{event_id}",
+            "1",
+            nx=True,
+            ex=ttl_seconds,
+        )
+    )
+
+
+def release_event_claim(event_id: str) -> None:
+    redis_client.delete(f"{IDEMPOTENCY_PREFIX}{event_id}")
