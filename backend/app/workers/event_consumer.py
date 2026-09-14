@@ -4,8 +4,8 @@ import time
 from app.core.redis import redis_client
 from app.events.dead_letter import send_to_dead_letter
 from app.events.idempotency import (
-    is_event_processed,
-    mark_event_processed,
+    try_claim_event,
+    release_event_claim,
 )
 from app.events.publisher import EVENT_STREAM
 from app.workers.config import MAX_RETRIES
@@ -172,9 +172,13 @@ def consume_events():
 
                 event_id = event["event_id"]
 
-                if is_event_processed(event_id):
+                # Atomic claim, checked BEFORE any processing starts —
+                # closes the race where two consumers (or a redelivery
+                # racing a still-in-flight first attempt) could both see
+                # "not yet processed" and both act on the same event.
+                if not try_claim_event(event_id):
                     print(
-                        f"Skipping already processed event: "
+                        f"Skipping already claimed/processed event: "
                         f"{event_id}"
                     )
 
@@ -198,8 +202,6 @@ def consume_events():
 
                         process_event(event)
 
-                        mark_event_processed(event_id)
-
                         redis_client.xack(
                             EVENT_STREAM,
                             CONSUMER_GROUP,
@@ -219,6 +221,13 @@ def consume_events():
                             time.sleep(2)
 
                         else:
+                            # Release the claim so a manual DLQ replay of
+                            # this same event_id later isn't silently
+                            # skipped as "already processed" — only a
+                            # successful run should hold the claim for
+                            # its full TTL.
+                            release_event_claim(event_id)
+
                             send_to_dead_letter(
                                 event,
                                 str(exc),

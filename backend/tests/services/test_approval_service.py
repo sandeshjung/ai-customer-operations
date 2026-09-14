@@ -184,4 +184,16 @@ class TestReject:
     def test_raises_if_not_found(self, db_session):
         with pytest.raises(ValueError, match="not found"):
             approval_service.reject(db=db_session, approval_id=999, reviewer="bob")
-            
+
+    def test_raises_if_already_reviewed(self, db_session):
+        """Previously reject() had no status check at all — you could
+        "reject" an approval that had already been approved and
+        executed (ticket already created), which is misleading since
+        nothing about the reject undoes that. Now it requires PENDING,
+        same as approve()."""
+        approval = _make_pending_approval(db_session)
+        approval.status = ApprovalStatus.APPROVED
+        db_session.commit()
+
+        with pytest.raises(ValueError, match="already"):
+            approval_service.reject(db=db_session, approval_id=approval.id, reviewer="bob")

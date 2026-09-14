@@ -1,5 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.agents.models import AgentDecision
@@ -50,18 +51,46 @@ def get_pending_approvals(db: Session, limit: int = 50) -> list[HumanApproval]:
         .all()
     )
 
+def _claim_approval(db: Session, approval_id: int, new_status: str, reviewer: str, notes: str | None) -> HumanApproval:
+    """Atomically transition an approval out of PENDING, or raise.
+
+    Two people (or a double-click, or a retried request) hitting approve/
+    reject on the same approval at the same time is a real race with a
+    plain read-then-write: both could read status=PENDING before either
+    writes, and both proceed — e.g. both approve, both create a ticket.
+
+    UPDATE ... WHERE status = 'PENDING' is a single atomic statement at
+    the database level: only one concurrent caller can ever match the
+    WHERE clause and flip the row, because the DB serializes concurrent
+    writes to the same row. Whoever's UPDATE affects 0 rows lost the
+    race and gets a clear error instead of silently duplicating the
+    action.
+    """
+    result = db.execute(
+        update(HumanApproval)
+        .where(HumanApproval.id == approval_id, HumanApproval.status == ApprovalStatus.PENDING.value)
+        .values(
+            status=new_status.value,
+            reviewed_by=reviewer,
+            reviewed_at=datetime.now(timezone.utc),
+            reviewer_notes=notes
+        )
+    )
+    rowcount = result.rowcount
+    result.close()
+    db.commit()
+
+    if rowcount == 0:
+        existing = db.get(HumanApproval, approval_id)
+        if existing is None:
+            raise ValueError("Approval not found")
+        raise ValueError(f"Approval already {existing.status}")
+
+    # expire on commit means this re-fetches fresh from the db rather than returning a stale in-memory copy.
+    return db.get(HumanApproval, approval_id)
+
 def approve(db: Session, approval_id: int, reviewer: str, notes: str | None = None) -> tuple[HumanApproval, dict]:
-    approval = db.get(HumanApproval, approval_id)
-    if not approval:
-        raise ValueError("Approval not found")
-
-    if approval.status != ApprovalStatus.PENDING:
-        raise ValueError(f"Approval already {approval.status}")
-
-    approval.status = ApprovalStatus.APPROVED
-    approval.reviewed_by = reviewer
-    approval.reviewed_at = datetime.utcnow()
-    approval.reviewer_notes = notes
+    approval = _claim_approval(db, approval_id, ApprovalStatus.APPROVED, reviewer, notes)
 
     # reconstruct decision and execute
     decision = AgentDecision.model_validate(approval.decision)
@@ -105,15 +134,7 @@ def approve(db: Session, approval_id: int, reviewer: str, notes: str | None = No
     return approval, result
 
 def reject(db: Session, approval_id: int, reviewer: str, notes: str | None = None) -> HumanApproval:
-    approval = db.get(HumanApproval, approval_id)
-    if not approval:
-        raise ValueError("Approval not found")
-
-    approval.status = ApprovalStatus.REJECTED
-    approval.reviewed_by = reviewer
-    approval.reviewed_at = datetime.utcnow()
-    approval.reviewer_notes = notes
-    db.commit()
+    approval = _claim_approval(db, approval_id, ApprovalStatus.REJECTED, reviewer, notes)
 
     decision = AgentDecision.model_validate(approval.decision)
 
