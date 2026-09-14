@@ -9,6 +9,14 @@ export function setApiBase(value) {
   localStorage.setItem("adminApiBase", value.trim());
 }
 
+export function getApiKey() {
+  return localStorage.getItem("adminApiKey") || "";
+}
+
+export function setApiKey(value) {
+  localStorage.setItem("adminApiKey", value.trim());
+}
+
 export function jaegerTraceUrl(traceId) {
   if (!traceId) return null;
   const base = (localStorage.getItem("adminJaegerUrl") || DEFAULT_JAEGER_UI).replace(/\/$/, "");
@@ -28,7 +36,10 @@ class ApiError extends Error {}
 
 async function request(path, options = {}) {
   const res = await fetch(getApiBase() + path, {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": getApiKey(),
+    },
     ...options,
   });
 
@@ -39,6 +50,9 @@ async function request(path, options = {}) {
       detail = body.detail || detail;
     } catch {
       // response wasn't JSON — keep statusText
+    }
+    if (res.status === 401) {
+      detail = "Invalid or missing API key — check the key field in the header.";
     }
     throw new ApiError(`${res.status} ${detail}`);
   }

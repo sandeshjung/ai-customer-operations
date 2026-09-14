@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from app.core.database import get_db
+from app.core.security import rate_limit, require_api_key
 
 from app.models.order import Order, OrderStatus
 from app.models.order_item import OrderItem
@@ -95,6 +96,7 @@ def get_order(
 @router.post(
     "",
     response_model=OrderResponse,
+    dependencies=[Depends(require_api_key)]
 )
 def create_order(
     data: OrderCreate,
@@ -159,7 +161,12 @@ def create_order(
     return order
 
 
-@router.post("/monitor/delayed")
+@router.post(
+        "/monitor/delayed",
+        dependencies=[
+            Depends(require_api_key),
+            Depends(rate_limit("monitor_delayed", max_requests=5, window_seconds=60))
+        ])
 def monitor_delayed_orders(db: Session = Depends(get_db)):
     published = detect_delayed_orders(db)
 

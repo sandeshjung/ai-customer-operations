@@ -40,6 +40,10 @@ class Settings(BaseSettings):
 
     NOTIFICATION_BACKEND: str = "log"
 
+    ADMIN_API_KEY: str | None = None 
+
+    RATE_LIMIT_ENABLED: bool = True
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

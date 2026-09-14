@@ -1,4 +1,5 @@
 from app.core.database import get_db
+from app.core.security import require_api_key
 from app.models.customer import Customer
 from app.schemas.customer import CustomerCreate, CustomerResponse
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,6 +14,7 @@ router = APIRouter(
 @router.post(
     "",
     response_model=CustomerResponse,
+    dependencies=[Depends(require_api_key)]
 )
 def create_customer(
     data: CustomerCreate,

@@ -1,0 +1,110 @@
+# CLAUDE.md
+
+Context for Claude Code working in this repo. Read this before making changes — several things here are non-obvious and will cost you time (or cause a wrong fix) if missed.
+
+## What this is
+
+An event-driven AI customer operations platform. Two LLM agents monitor delayed orders and triage support tickets, decide what to do, and either act automatically or queue the decision for human approval. Built as a portfolio project demonstrating production-grade agent patterns: tool-calling, RAG, human-in-the-loop, observability, evaluation, and the operational bugs that show up once you actually build this stuff (races, idempotency, prompt injection) rather than just the happy path.
+
+Core flow: `ORDER_DELAYED` event → Delayed Order Agent investigates (tool calls: get_order, get_shipment, get_customer, search_shipping_policy) → decision → either auto-executed or queued for human approval → if it creates a ticket, `TICKET_CREATED` event → Triage Agent classifies it.
+
+## Stack
+
+Python 3.12+, FastAPI, PostgreSQL, Redis (event bus + rate limiting + idempotency), Qdrant (vector store), LangGraph (both agents), Groq (LLM provider), OpenTelemetry + Jaeger (tracing), React + Vite (admin console), uv (dependency management), Alembic (migrations), pytest.
+
+## ⚠️ The frontend folder is misspelled: `frontent/`, not `frontend/`
+
+This typo is baked into the directory name (`frontent/admin/`) and has been left as-is rather than renamed, since renaming risks breaking anything else that references the path and wasn't worth the churn. Don't "fix" it without checking — just use the existing name.
+
+## Directory structure
+
+\```
+backend/
+  app/
+    agents/
+      graphs/          # delayed_order.py, triage_agent.py — the two LangGraph agents
+      tools/            # DB-backed tools the delayed-order agent calls
+      models.py         # AgentDecision, TriageDecision (pydantic, not DB models)
+      guardrails.py      # post-decision validation (e.g. CRITICAL severity forces requires_human)
+    api/                # FastAPI routers — one file per resource
+    core/
+      config.py          # Settings (pydantic-settings, reads .env)
+      security.py         # require_api_key, rate_limit dependencies
+      tracing.py           # OpenTelemetry setup + helpers (traced, inject/extract/link)
+      database.py, redis.py, logging.py
+    events/              # Event schema, publisher, idempotency (atomic Redis claim), dead-letter
+    models/              # SQLAlchemy models
+    rag/                  # hybrid (BM25 + vector) retrieval over policy docs
+    schemas/              # pydantic request/response schemas for the API
+    services/             # business logic — agent_service, triage_service, action_service,
+                           # approval_service, notification_service
+    workers/
+      event_consumer.py     # the Redis Streams polling loop — see gotchas below
+  alembic/versions/       # migrations
+  evaluation/              # agent accuracy eval harness, scaled for Groq free-tier limits
+  scripts/                 # seed_database.py, run_worker.py, ingest_knowledge.py
+  tests/
+frontent/admin/            # React admin console (note the typo — see above)
+data/knowledge/             # policy PDFs, embedded into Qdrant
+docs/                        # plain-text source of the same policy docs (used for chunking/ingestion)
+docker-compose.yml            # Postgres, Redis, Qdrant, Jaeger (NOT the backend/worker — no Dockerfile yet)
+\```
+
+## Commands
+
+\```bash
+uv sync                                    # install deps
+docker compose up -d                        # start Postgres/Redis/Qdrant/Jaeger
+PYTHONPATH=backend uv run alembic upgrade head   # run migrations
+make seed                                     # seed synthetic data
+make dev                                       # start the API (uvicorn --reload)
+PYTHONPATH=backend uv run python backend/scripts/run_worker.py   # start the event worker (separate process)
+
+make test                                      # full test suite
+uv run pytest backend/tests/services/            # just the service layer
+uv run pytest backend/tests/services/test_approval_service_concurrency.py -v   # the real threaded race test
+
+make evaluate-quick                             # agent eval, first 3 scenarios only (cheap smoke test)
+make evaluate                                    # full agent eval — costs real LLM calls, see below
+
+cd frontent/admin && npm install && npm run dev    # admin console, expects API at localhost:8000
+\```
+
+pytest's `pythonpath` is already set to `backend` in `pyproject.toml`, so you usually don't need `PYTHONPATH=backend` for test runs — only for one-off scripts run directly.
+
+## Non-obvious things that will bite you
+
+**1. Importing the RAG chain triggers a real network call.** `app.rag.retriever` instantiates a real HuggingFace embedding model *at module import time*, unconditionally — no lazy loading. This chain gets pulled in transitively by almost anything agent-related: `agent_service` → `delayed_order` graph → `rag.service`. If you're writing a test or script that doesn't need real RAG, you must stub `sys.modules["app.rag.service"]` with a fake module **before** importing anything that touches it — patching it after import is too late, and `unittest.mock.patch("app.rag.service.x", ...)` itself triggers the real import while resolving the patch target. Look at `backend/tests/workers/test_event_consumer.py` or `test_triage_service.py` for the pattern (`sys.modules["app.rag.service"] = fake_module`, done at the very top of the file, before other imports).
+
+**2. `TicketPriority` is stored as a plain `String(30)` column, not a real SQL enum.** Every fresh load from the DB returns a plain Python `str`, not a `TicketPriority` instance — even though the model's type hint says `Mapped[TicketPriority]`. The hint doesn't cause runtime coercion. If you need to compare or rank priorities, normalize first: `TicketPriority(db_ticket.priority)`. This bit us once already (`triage_service.py`'s priority-upgrade logic crashed on every real run until fixed) — don't assume `.value` or enum methods work on a value pulled fresh from the DB without normalizing.
+
+**3. `event_consumer.py`'s `consume_events()` sleeps twice per message, always.** `time.sleep(15)` then `time.sleep(PROCESSING_DELAY_SECONDS)` (also 15) — 30s of dead time per event regardless of outcome, capping throughput at ~2 events/min. This is almost certainly meant as one Groq-rate-limit safeguard that got duplicated, not two intentional delays, but it hasn't been touched — see `TestSleepBehavior` in `test_consume_events.py` for the reasoning. Don't silently "fix" this; it's a deliberate choice to leave it for a human to decide on, not an oversight.
+
+**4. Event processing uses atomic claims, not read-then-write, for idempotency and approval concurrency.** `try_claim_event()` (Redis `SET NX`) guards against two consumers processing the same event; `_claim_approval()` (SQL `UPDATE ... WHERE status = 'PENDING'`, checked via rowcount) guards against double-approving. If you're touching either of these, preserve the atomic-claim pattern — a plain "check status, then write" reintroduces a real race (there's a threaded test, `test_approval_service_concurrency.py`, that will catch it if you regress this).
+
+**5. Groq free-tier rate limits shape a lot of design choices here.** The evaluation harness (`backend/evaluation/`) has retry/backoff/checkpointing and an `EVAL_LIMIT` env var specifically because running the full eval suite can blow through free-tier quota. Don't casually scale up dataset sizes or remove the pacing without checking `backend/evaluation/README.md`.
+
+**6. No Dockerfile for the backend or worker yet.** `docker-compose.yml` only containerizes infra (Postgres, Redis, Qdrant, Jaeger). The API and worker run directly via `uv run`, not in containers.
+
+**7. Auth is a single shared secret, not per-user.** `ADMIN_API_KEY` gates all mutating endpoints and the whole `/admin/*` router, sent via `X-API-Key` header. There's no login/session system — don't assume `current_user`-style patterns exist anywhere. If `ADMIN_API_KEY` isn't set, protected endpoints fail closed with a 503 (not silently open).
+
+## Testing conventions
+
+- `backend/tests/conftest.py` provides a `db_session` fixture: fresh in-memory SQLite per test, not Postgres. All models use plain SQLAlchemy types (no JSONB/ARRAY), so this is a faithful stand-in for service-layer tests. Concurrency tests need a *shared* SQLite DB across threads instead (plain `sqlite:///:memory:` gives each connection its own isolated DB) — see `test_approval_service_concurrency.py` for the `StaticPool` pattern.
+- External services (Redis, the LLM, RAG) are mocked at the service-layer boundary — tests exercise real business logic against a real (in-memory) DB, with only genuinely external calls faked out.
+- When you fix a bug found via manual testing or code review, write the regression test *and verify it actually catches the bug* — temporarily reintroduce the old code and confirm the test fails, then restore the fix. Several bugs in this codebase were caught exactly this way (see git history for `reject()`'s missing return statement, or the triage priority-comparison bug).
+- `backend/tests/agents/test_delayed_order.py`, `test_rag_integration.py`, and both files under `backend/tests/rag/` need real network access (HuggingFace) — expect these to fail in sandboxed/offline environments; that's a pre-existing environment limitation, not a code bug.
+
+## Observability
+
+OpenTelemetry traces everything: every tool call, every LLM call (with token usage), every RAG retrieval, one root span per agent run and per event processed. Default exporter is local Jaeger (`docker compose up -d jaeger`, UI at `localhost:16686`, zero signup). Swap to Langfuse by changing two env vars (`OTEL_EXPORTER_OTLP_ENDPOINT` + `OTEL_EXPORTER_OTLP_HEADERS`) — no code changes needed, since Langfuse OSS 3.22+ ingests OTLP natively.
+
+Trace context propagates across the async event boundary: when the delay agent's auto-execute path publishes `TICKET_CREATED`, it injects the current trace context into the event payload, and the consumer continues that same trace rather than starting a new one. The human-approval path is different — by the time someone clicks Approve, the original trace is long closed, so that path uses an OTel **Link** (a cross-trace reference) instead of a parent-child relationship. Don't conflate these two mechanisms; they solve different problems (live process boundary vs. temporally disjoint actions).
+
+## Known gaps (not fixed, don't assume they are)
+
+- No customer-facing frontend — only the admin console exists.
+- No Dockerfile for backend/worker, no CI/CD (no `.github/`).
+- No worker process supervision/restart policy.
+- Rate limiting is fixed-window (not sliding-window/token-bucket) — good enough to stop accidental abuse, not a determined attacker.
+- Prompt-injection mitigation on the triage agent (delimiting customer content, explicit system-prompt instruction) is real but unverified against an actual model — no automated test can confirm the LLM *obeys* the instruction without a paid API call. Treat it as a mitigation, not a guarantee.

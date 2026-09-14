@@ -3,9 +3,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.security import require_api_key
 from app.services.approval_service import approve, get_pending_approvals, reject
 
-router = APIRouter(prefix="/admin", tags=["Admin"])
+router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(require_api_key)])
 
 class ApprovalReview(BaseModel):
     reviewer: str

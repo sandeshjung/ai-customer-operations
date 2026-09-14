@@ -596,3 +596,7 @@ td.subject {
     transition: none;
   }
 }
+
+.dot.unauthorized {
+  background: var(--amber);
+}

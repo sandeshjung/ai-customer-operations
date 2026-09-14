@@ -1,4 +1,5 @@
 from app.core.database import get_db
+from app.core.security import require_api_key
 from app.models.product import Product
 from app.schemas.product import ProductCreate, ProductResponse
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,7 @@ router = APIRouter(prefix="/products", tags=["Products"])
 @router.post(
     "",
     response_model=ProductResponse,
+    dependencies=[Depends(require_api_key)]
 )
 def create_product(
     data: ProductCreate,

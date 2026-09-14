@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, getApiBase, setApiBase } from "./api";
+import { api, getApiBase, getApiKey, setApiBase, setApiKey } from "./api";
 import { useToast } from "./useToast";
 import { ApprovalsSection } from "./components/ApprovalsSelection";
 import { OrdersSection } from "./components/OrdersSection";
@@ -16,6 +16,7 @@ function useEndpointState() {
 export default function App() {
   const [approvals, setApprovals] = useEndpointState();
   const [apiBaseValue, setApiBaseValue] = useState(getApiBase());
+  const [apiKeyValue, setApiKeyValue] = useState(getApiKey());
   const [connState, setConnState] = useState("pending");
   const [orders, setOrders] = useEndpointState();
   const [tickets, setTickets] = useEndpointState();
@@ -29,7 +30,7 @@ export default function App() {
         setConnState("ok");
     } catch (err) {
         setApprovals({ status: "error", data: [], error: err.message });
-        setConnState("err");
+        setConnState(err.message.startsWith("401") ? "unauthorized" : "err");
     }
   }, [setApprovals]);
 
@@ -83,6 +84,12 @@ export default function App() {
     loadAll();
   }
 
+  function handleApiKeyChange(value) {
+    setApiKeyValue(value);
+    setApiKey(value);
+    loadAll();
+  }
+
   return (
     <div className="wrap">
         <header className="top">
@@ -95,6 +102,7 @@ export default function App() {
                   <span className={`dot ${connState}`}></span>
                   {connState === "ok" && "Connected"}
                   {connState === "err" && "Can't reach API"}
+                  {connState === "unauthorized" && "Invalid API key"}
                   {connState === "pending" && "Connecting…"}
                 </span>
                 <input 
@@ -102,6 +110,14 @@ export default function App() {
                 spellCheck={false}
                 value={apiBaseValue}
                 onChange={(e) => handleApiBaseChange(e.target.value)}
+                />
+                <input
+                className="mono"
+                type="password"
+                placeholder="API key"
+                spellCheck={false}
+                value={apiKeyValue}
+                onChange={(e) => handleApiKeyChange(e.target.value)}
                 />
                 <button className="ghost" onClick={loadAll}>
                     Refresh
@@ -129,4 +145,4 @@ export default function App() {
 
     </div>
   );
-}  
+}

@@ -9,11 +9,12 @@ __pycache__/
 # Environment variables
 .env
 .env.*
-.env.example
+!.env.example
 
 # Testing
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
 
 # Ruff
@@ -43,6 +44,20 @@ data/local/
 
 # Docker
 docker-volumes/
+
+# Evaluation run artifacts (generated, machine-specific)
+backend/evaluation/reports/*.json
+backend/evaluation/reports/*.jsonl
+!backend/evaluation/reports/.gitkeep
+
+# Jupyter (notebook/playground.ipynb)
+.ipynb_checkpoints/
+
+# Accidental local DB files (the real DB is Postgres; nothing in this
+# repo should create these, but better to catch it than commit one)
+*.db
+*.sqlite
+*.sqlite3
 
 # Evaluation run artifacts (generated, machine-specific)
 backend/evaluation/reports/*.json

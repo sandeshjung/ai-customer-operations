@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 from app.core.database import get_db
+from app.core.security import require_api_key
 from app.models.order import Order
 from app.models.shipment import Shipment, ShipmentStatus
 from app.schemas.shipment import ShipmentResponse
@@ -13,6 +14,7 @@ router = APIRouter(prefix="/shipments", tags=["Shipments"])
 @router.post(
     "/{order_id}",
     response_model=ShipmentResponse,
+    dependencies=[Depends(require_api_key)]
 )
 def create_shipment(
     order_id: int,
