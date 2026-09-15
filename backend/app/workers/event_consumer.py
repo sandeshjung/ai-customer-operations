@@ -10,6 +10,7 @@ from app.events.idempotency import (
 )
 from app.events.publisher import EVENT_STREAM
 from app.workers.config import MAX_RETRIES
+from app.workers.health import record_heartbeat
 
 logger = get_logger(__name__)
 
@@ -165,6 +166,8 @@ def consume_events():
             count=1,
             block=5000,
         )
+
+        record_heartbeat()
 
         if not messages:
             continue

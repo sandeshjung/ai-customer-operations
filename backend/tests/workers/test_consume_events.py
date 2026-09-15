@@ -1,18 +1,3 @@
-"""
-Tests for app.workers.event_consumer.consume_events.
-
-consume_events() is a `while True` polling loop with no natural exit, so
-each test feeds it exactly one batch via a mocked xreadgroup, then raises
-a sentinel exception on the *next* call to break out of the loop
-deterministically. The test then asserts on what happened during that one
-batch, and unwraps the sentinel with pytest.raises.
-
-time.sleep is patched to a no-op in every test here — consume_events
-sleeps unconditionally after every message (see the docstring on
-TestSleepBehavior below for why that's worth reading closely, not just
-silencing), and these tests would otherwise take 30+ seconds each.
-"""
-
 import json
 import sys
 import types
@@ -54,9 +39,11 @@ def _order_delayed_event(event_id: str = "evt-1") -> dict:
 @pytest.fixture(autouse=True)
 def _patch_common():
     """Every test here needs the same baseline: no real Redis group
-    creation, no real sleeping, and a way to end the infinite loop."""
+    creation, no real sleeping, no real heartbeat writes, and a way to
+    end the infinite loop."""
     with (
         patch.object(event_consumer, "create_consumer_group"),
+        patch.object(event_consumer, "record_heartbeat"),
         patch("time.sleep"),
     ):
         yield

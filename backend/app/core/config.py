@@ -44,6 +44,13 @@ class Settings(BaseSettings):
 
     RATE_LIMIT_ENABLED: bool = True
 
+    # Worker health check — see app/workers/health.py. A tiny HTTP server
+    # the worker process runs alongside its main loop, so Docker (or any
+    # external monitor) can tell "still processing events" apart from
+    # "hung/crashed but the process technically hasn't exited yet".
+    WORKER_HEALTH_PORT: int = 8001
+    WORKER_HEARTBEAT_TTL_SECONDS: int = 60
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -83,6 +83,8 @@ services:
     build: .
     container_name: customer-operations-worker
     restart: unless-stopped
+    labels:
+      - "autoheal=true"
     env_file: .env
     environment:
       POSTGRES_HOST: postgres
@@ -90,6 +92,8 @@ services:
       redis_url: redis://redis:6379/0
       QDRANT_HOST: qdrant
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+    ports:
+      - "8001:8001" # health check — curl http://localhost:8001/health to inspect manually
     depends_on:
       postgres:
         condition: service_healthy
@@ -99,7 +103,22 @@ services:
         condition: service_started
       api:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     command: ["sh", "backend/scripts/start_worker.sh"]
+
+  autoheal:
+    image: willfarrell/autoheal
+    container_name: customer-operations-autoheal
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   postgres_data:
