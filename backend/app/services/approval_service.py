@@ -1,13 +1,12 @@
-from datetime import datetime, timezone
-
-from sqlalchemy import update
-from sqlalchemy.orm import Session
+from datetime import UTC, datetime
 
 from app.agents.models import AgentDecision
 from app.core.logging import get_logger
 from app.core.tracing import link_from_carrier, traced
 from app.models.human_approval import ApprovalStatus, HumanApproval
 from app.services.action_service import execute_decision
+from sqlalchemy import update
+from sqlalchemy.orm import Session
 
 logger = get_logger(__name__)
 
@@ -80,7 +79,7 @@ def _claim_approval(
         .values(
             status=new_status.value,
             reviewed_by=reviewer,
-            reviewed_at=datetime.now(timezone.utc),
+            reviewed_at=datetime.now(UTC),
             reviewer_notes=notes,
         )
     )

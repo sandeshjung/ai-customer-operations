@@ -1,9 +1,8 @@
 import time
 
-from fastapi import Header, HTTPException, Request
-
 from app.core.config import settings
 from app.core.redis import redis_client
+from fastapi import Header, HTTPException, Request
 
 
 def require_api_key(

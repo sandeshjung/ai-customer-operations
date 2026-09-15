@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from pypdf import PdfReader
 
 KNOWLEDGE_DIR = Path("data/knowledge")

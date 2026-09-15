@@ -1,10 +1,9 @@
 import json
 
-from groq import Groq
-
 from app.agents.models import AgentDecision
 from app.ai.base import LLMProvider
 from app.core.config import settings
+from groq import Groq
 
 
 class GroqProvider(LLMProvider):

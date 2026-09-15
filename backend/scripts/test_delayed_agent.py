@@ -3,7 +3,6 @@ from app.agents.delayed_order_agent import (
     analyze_delayed_order,
 )
 
-
 context = DelayedOrderContext(
     order={
         "id": 10024,

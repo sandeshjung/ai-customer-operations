@@ -1,8 +1,7 @@
 from enum import StrEnum
 
+from app.models.support_ticket import TicketPriority
 from pydantic import BaseModel, Field
-
-from app.models.support_ticket import TicketPriority, TicketStatus
 
 
 class ResolutionType(StrEnum):

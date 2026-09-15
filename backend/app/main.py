@@ -1,15 +1,15 @@
+from app.api.admin import router as admin_router
 from app.api.customers import router as customers_router
+from app.api.health import router as health_router
 from app.api.orders import router as orders_router
 from app.api.products import router as products_router
 from app.api.shipments import router as shipments_router
 from app.api.tickets import router as tickets_router
 from app.core.config import settings
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from app.core.logging import configure_logging
 from app.core.tracing import setup_tracing
-from app.api.health import router as health_router
-from app.api.admin import router as admin_router
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 configure_logging()
 setup_tracing()

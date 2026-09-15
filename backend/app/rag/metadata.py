@@ -1,6 +1,3 @@
-from pathlib import Path
-
-
 def build_metadata(chunk: dict) -> dict:
     source = chunk["source"]
 

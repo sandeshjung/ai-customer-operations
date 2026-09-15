@@ -28,14 +28,13 @@ not "broken app".
 import base64
 import logging
 
+from app.core.config import settings
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.propagate import extract, inject
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,5 @@
-from sqlalchemy.orm import Session
-
 from app.models.customer import Customer
+from sqlalchemy.orm import Session
 
 
 def get_customer(

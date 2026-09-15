@@ -82,7 +82,7 @@ def evaluate_faithfulness():
 
         try:
             result = _judge(item["question"], context)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - one bad item must not abort the whole eval run
             print(f"FAIL | {item['question']}: {exc}")
             failed.append({"question": item["question"], "error": str(exc)})
             paced_sleep()

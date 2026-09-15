@@ -2,7 +2,6 @@ from app.agents.graphs.delayed_order import (
     delayed_order_graph,
 )
 
-
 result = delayed_order_graph.invoke(
     {
         "messages": [

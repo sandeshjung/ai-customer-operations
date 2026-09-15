@@ -14,7 +14,6 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
-
 from app.models.customer import Customer
 from app.models.order import Order
 from app.workers import event_consumer
@@ -148,7 +147,7 @@ class TestTicketCreated:
 
 class TestSessionCleanup:
     def test_db_closed_even_if_investigation_raises(self, db_session):
-        customer, order = _make_customer_and_order(db_session)
+        _customer, order = _make_customer_and_order(db_session)
 
         with (
             patch.object(
@@ -157,14 +156,14 @@ class TestSessionCleanup:
                 side_effect=RuntimeError("boom"),
             ),
             patch.object(db_session, "close", wraps=db_session.close) as mock_close,
+            pytest.raises(RuntimeError, match="boom"),
         ):
-            with pytest.raises(RuntimeError, match="boom"):
-                event_consumer.process_event(_order_delayed_event(order.id))
+            event_consumer.process_event(_order_delayed_event(order.id))
 
         mock_close.assert_called_once()
 
     def test_db_closed_on_success_too(self, db_session):
-        customer, order = _make_customer_and_order(db_session)
+        _customer, order = _make_customer_and_order(db_session)
         decision = MagicMock(requires_human=False)
 
         with (

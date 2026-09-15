@@ -2,8 +2,6 @@ import json
 from datetime import date
 from pathlib import Path
 
-from langchain_core.messages import HumanMessage
-
 from app.agents.graphs.delayed_order import delayed_order_graph
 from app.agents.state import DelayedOrderState
 from app.core.logging import configure_logging
@@ -13,6 +11,7 @@ from evaluation.utils import (
     paced_sleep,
     retry_with_backoff,
 )
+from langchain_core.messages import HumanMessage
 
 configure_logging()
 
@@ -79,7 +78,7 @@ def evaluate_delayed_order_agent():
         else:
             try:
                 got = _run_scenario(scenario)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - one bad scenario must not abort the whole eval run
                 print(f"FAIL | {scenario['description']}: {exc}")
                 failed.append({"order_id": scenario["order_id"], "error": str(exc)})
                 paced_sleep()

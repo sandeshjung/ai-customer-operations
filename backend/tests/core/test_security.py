@@ -1,9 +1,8 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
-
 from app.core import security
+from fastapi import HTTPException
 
 
 class TestRequireApiKey:
@@ -13,24 +12,30 @@ class TestRequireApiKey:
             security.require_api_key(x_api_key="secret123")
 
     def test_rejects_wrong_key(self):
-        with patch.object(security.settings, "ADMIN_API_KEY", "secret123"):
-            with pytest.raises(HTTPException) as exc_info:
-                security.require_api_key(x_api_key="wrong")
+        with (
+            patch.object(security.settings, "ADMIN_API_KEY", "secret123"),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            security.require_api_key(x_api_key="wrong")
         assert exc_info.value.status_code == 401
 
     def test_rejects_missing_key(self):
-        with patch.object(security.settings, "ADMIN_API_KEY", "secret123"):
-            with pytest.raises(HTTPException) as exc_info:
-                security.require_api_key(x_api_key=None)
+        with (
+            patch.object(security.settings, "ADMIN_API_KEY", "secret123"),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            security.require_api_key(x_api_key=None)
         assert exc_info.value.status_code == 401
 
     def test_fails_closed_and_loud_when_unconfigured(self):
         """An unset ADMIN_API_KEY means auth was never set up — this
         should refuse every request with a clear 503, not silently let
         everything through."""
-        with patch.object(security.settings, "ADMIN_API_KEY", None):
-            with pytest.raises(HTTPException) as exc_info:
-                security.require_api_key(x_api_key="anything")
+        with (
+            patch.object(security.settings, "ADMIN_API_KEY", None),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            security.require_api_key(x_api_key="anything")
         assert exc_info.value.status_code == 503
 
 

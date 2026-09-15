@@ -1,8 +1,7 @@
-from sqlalchemy.orm import Session
-
 from app.agents.tools.customer_tools import get_customer
 from app.agents.tools.order_tools import get_order
 from app.agents.tools.shipment_tools import get_shipment
+from sqlalchemy.orm import Session
 
 
 class ToolRegistry:

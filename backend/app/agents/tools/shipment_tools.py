@@ -1,6 +1,5 @@
-from sqlalchemy.orm import Session
-
 from app.models.shipment import Shipment
+from sqlalchemy.orm import Session
 
 
 def get_shipment(

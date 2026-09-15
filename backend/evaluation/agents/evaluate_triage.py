@@ -1,8 +1,6 @@
 import json
 from pathlib import Path
 
-from langchain_core.messages import HumanMessage
-
 from app.agents.graphs.triage_agent import triage_graph
 from evaluation.utils import (
     Checkpoint,
@@ -10,6 +8,7 @@ from evaluation.utils import (
     paced_sleep,
     retry_with_backoff,
 )
+from langchain_core.messages import HumanMessage
 
 DATASET_PATH = Path("backend/evaluation/datasets/triage_scenarios.json")
 
@@ -71,7 +70,7 @@ def evaluate_triage_agent():
         else:
             try:
                 got = _run_scenario(scenario)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - one bad scenario must not abort the whole eval run
                 print(f"FAIL | {scenario['subject']}: {exc}")
                 failed.append({"ticket_id": scenario["ticket_id"], "error": str(exc)})
                 paced_sleep()

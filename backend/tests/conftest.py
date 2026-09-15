@@ -5,12 +5,9 @@ os.environ.setdefault("LLM_API_KEY", "test-key")
 os.environ.setdefault("GROQ_API_KEY", "test-key")
 
 import pytest
+from app.models.base import Base
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
-from app.models.base import Base
-
-import app.models
 
 
 @pytest.fixture

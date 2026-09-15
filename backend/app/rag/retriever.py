@@ -1,7 +1,6 @@
+from app.core.config import settings
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_qdrant import QdrantVectorStore
-
-from app.core.config import settings
 
 embeddings = HuggingFaceEmbeddings(model_name=settings.EMBEDDING_MODEL)
 

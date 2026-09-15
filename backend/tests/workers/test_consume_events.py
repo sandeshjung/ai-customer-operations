@@ -24,12 +24,11 @@ _fake_rag_service = types.ModuleType("app.rag.service")
 _fake_rag_service.retrieve_policy = lambda query, limit=5: []
 sys.modules["app.rag.service"] = _fake_rag_service
 
-from unittest.mock import call, patch  # noqa: E402
+from unittest.mock import call, patch
 
-import pytest  # noqa: E402
-
-from app.workers import event_consumer  # noqa: E402
-from app.workers.config import MAX_RETRIES  # noqa: E402
+import pytest
+from app.workers import event_consumer
+from app.workers.config import MAX_RETRIES
 
 
 class _StopLoop(Exception):
@@ -80,9 +79,9 @@ class TestProcessesNewEvent:
             patch.object(event_consumer, "release_event_claim") as mock_release,
             patch.object(event_consumer, "process_event") as mock_process,
             patch.object(event_consumer, "send_to_dead_letter") as mock_dlq,
+            pytest.raises(_StopLoop),
         ):
-            with pytest.raises(_StopLoop):
-                event_consumer.consume_events()
+            event_consumer.consume_events()
 
         mock_claim.assert_called_once_with("evt-1")
         mock_process.assert_called_once_with(event)
@@ -112,9 +111,9 @@ class TestSkipsAlreadyClaimed:
             patch.object(event_consumer.redis_client, "xack") as mock_xack,
             patch.object(event_consumer, "try_claim_event", return_value=False),
             patch.object(event_consumer, "process_event") as mock_process,
+            pytest.raises(_StopLoop),
         ):
-            with pytest.raises(_StopLoop):
-                event_consumer.consume_events()
+            event_consumer.consume_events()
 
         mock_process.assert_not_called()
         # Still needs acking, or Redis will keep redelivering it forever.
@@ -140,9 +139,9 @@ class TestRetryAndDeadLetter:
                 event_consumer, "process_event", side_effect=RuntimeError("boom")
             ) as mock_process,
             patch.object(event_consumer, "send_to_dead_letter") as mock_dlq,
+            pytest.raises(_StopLoop),
         ):
-            with pytest.raises(_StopLoop):
-                event_consumer.consume_events()
+            event_consumer.consume_events()
 
         assert mock_process.call_count == MAX_RETRIES
         mock_dlq.assert_called_once_with(event, "boom")
@@ -176,9 +175,9 @@ class TestRetryAndDeadLetter:
                 side_effect=[RuntimeError("transient"), None],
             ) as mock_process,
             patch.object(event_consumer, "send_to_dead_letter") as mock_dlq,
+            pytest.raises(_StopLoop),
         ):
-            with pytest.raises(_StopLoop):
-                event_consumer.consume_events()
+            event_consumer.consume_events()
 
         assert mock_process.call_count == 2
         mock_dlq.assert_not_called()
@@ -215,8 +214,8 @@ class TestSleepBehavior:
             patch.object(event_consumer, "try_claim_event", return_value=True),
             patch.object(event_consumer, "process_event"),
             patch("time.sleep") as mock_sleep,
+            pytest.raises(_StopLoop),
         ):
-            with pytest.raises(_StopLoop):
-                event_consumer.consume_events()
+            event_consumer.consume_events()
 
         assert mock_sleep.call_args_list == [call(15), call(15)]

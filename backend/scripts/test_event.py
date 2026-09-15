@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.events.publisher import publish_event
@@ -8,7 +8,7 @@ from app.events.types import EventType
 event = Event(
     event_id=str(uuid4()),
     event_type=EventType.ORDER_CREATED,
-    occurred_at=datetime.now(timezone.utc),
+    occurred_at=datetime.now(UTC),
     source="test-script",
     data={
         "order_id": 123,

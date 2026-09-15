@@ -1,8 +1,7 @@
 import json
 
-from langchain_core.messages import AIMessage, SystemMessage
-
 from app.agents.graphs import triage_agent
+from langchain_core.messages import AIMessage
 
 
 class _CapturingLLM:

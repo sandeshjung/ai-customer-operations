@@ -1,10 +1,9 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-
 from app.core.database import get_db
 from app.models.support_ticket import SupportTicket, TicketStatus
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
 

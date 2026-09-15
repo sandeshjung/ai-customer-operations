@@ -1,9 +1,10 @@
-from app.agents.models import AgentDecision
-from app.agents.guardrails import validate_decision
+from unittest.mock import patch
+
 import pytest
-from pydantic import ValidationError
-from unittest.mock import MagicMock, patch
+from app.agents.guardrails import validate_decision
+from app.agents.models import AgentDecision
 from langchain_core.messages import AIMessage
+from pydantic import ValidationError
 
 from backend.app.agents.graphs.delayed_order import should_continue
 

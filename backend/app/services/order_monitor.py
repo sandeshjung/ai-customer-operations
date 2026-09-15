@@ -1,18 +1,17 @@
-from datetime import date, datetime, timezone
 import time
+from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy.orm import Session
-
+from app.core.redis import redis_client
 from app.events.publisher import publish_event
 from app.events.schemas import Event
 from app.events.types import EventType
 from app.models.order import Order
-from app.core.redis import redis_client
+from sqlalchemy.orm import Session
 
 
 def detect_delayed_orders(db: Session) -> int:
-    today = date.today()
+    today = datetime.now(UTC).date()
 
     delayed_orders = (
         db.query(Order)
@@ -36,7 +35,7 @@ def detect_delayed_orders(db: Session) -> int:
         event = Event(
             event_id=str(uuid4()),
             event_type=EventType.ORDER_DELAYED,
-            occurred_at=datetime.now(timezone.utc),
+            occurred_at=datetime.now(UTC),
             source="order-monitor",
             data={
                 "order_id": order.id,

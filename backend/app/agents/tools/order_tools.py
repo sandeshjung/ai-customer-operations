@@ -1,6 +1,5 @@
-from sqlalchemy.orm import Session
-
 from app.models.order import Order
+from sqlalchemy.orm import Session
 
 
 def get_order(

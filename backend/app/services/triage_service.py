@@ -1,14 +1,14 @@
 from app.agents.graphs.triage_agent import triage_graph
-from app.agents.models import TriageAction, TicketPriority, TicketStatus
-from app.models.support_ticket import SupportTicket
+from app.agents.models import TicketPriority, TriageAction
 from app.core.logging import get_logger
 from app.core.tracing import traced
+from app.models.support_ticket import SupportTicket, TicketStatus
 
 logger = get_logger(__name__)
 
 
 def process_ticket(db, ticket_id: int, event_id: str):
-    from app.agents.tools.ticket_tools import get_ticket, get_customer_tickets
+    from app.agents.tools.ticket_tools import get_customer_tickets, get_ticket
     from app.rag.service import retrieve_policy
 
     with traced(

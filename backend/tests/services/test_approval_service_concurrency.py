@@ -1,18 +1,16 @@
 import threading
-from uuid import uuid4
 from unittest.mock import patch
+from uuid import uuid4
 
-import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-from app.models.base import Base
 import app.models  # noqa: F401 - registers all tables on Base.metadata
+import pytest
+from app.models.base import Base
 from app.models.customer import Customer
 from app.models.human_approval import ApprovalStatus, HumanApproval
 from app.models.order import Order
 from app.services import approval_service
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 
 @pytest.fixture()

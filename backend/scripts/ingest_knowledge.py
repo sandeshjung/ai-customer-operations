@@ -1,7 +1,7 @@
-from app.rag.loader import load_documents
 from app.rag.chunker import chunk_documents
-from app.rag.vector_store import create_vector_store
+from app.rag.loader import load_documents
 from app.rag.metadata import build_metadata
+from app.rag.vector_store import create_vector_store
 
 
 def main():

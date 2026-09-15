@@ -3,13 +3,12 @@ import logging
 import re
 import time
 
-from langchain_core.messages import SystemMessage
-from langgraph.graph import END, START, StateGraph
-from langchain_groq import ChatGroq
-
 from app.agents.models import TriageDecision
 from app.core.config import settings
 from app.core.tracing import current_trace_id, traced
+from langchain_core.messages import SystemMessage
+from langchain_groq import ChatGroq
+from langgraph.graph import END, START, StateGraph
 
 logger = logging.getLogger(__name__)
 

@@ -1,7 +1,5 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
-
-from sqlalchemy.orm import Session
 
 from app.agents.models import AgentDecision, DelaySeverity, ResolutionType
 from app.core.logging import get_logger
@@ -11,6 +9,7 @@ from app.events.schemas import Event
 from app.events.types import EventType
 from app.models.support_ticket import SupportTicket, TicketPriority, TicketStatus
 from app.services.notification_service import send_notification
+from sqlalchemy.orm import Session
 
 logger = get_logger(__name__)
 
@@ -98,7 +97,7 @@ def execute_decision(
             event = Event(
                 event_id=str(uuid4()),
                 event_type=EventType.TICKET_CREATED,
-                occurred_at=datetime.now(timezone.utc),
+                occurred_at=datetime.now(UTC),
                 source="delayed_order_agent",
                 data={
                     "ticket_id": ticket.id,

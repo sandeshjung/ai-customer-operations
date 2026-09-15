@@ -22,14 +22,13 @@ Env vars (all optional, sensible defaults for a free tier):
 import json
 import os
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import Any
 
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
-
-T = TypeVar("T")
 
 SLEEP_BETWEEN_SCENARIOS = float(os.getenv("EVAL_SLEEP_SECONDS", "5"))
 MAX_RETRIES = int(os.getenv("EVAL_MAX_RETRIES", "4"))
@@ -48,7 +47,7 @@ def _is_rate_limit_error(exc: Exception) -> bool:
     return "rate limit" in text or "rate_limit" in text or "429" in text
 
 
-def retry_with_backoff(
+def retry_with_backoff[T](
     fn: Callable[[], T],
     *,
     description: str,

@@ -2,23 +2,19 @@ import json
 import logging
 import re
 import time
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
-from langchain_core.tools import tool
-from langgraph.graph import END, START, StateGraph
-from langgraph.prebuilt import ToolNode
 
+from app.agents.guardrails import validate_decision
 from app.agents.models import AgentDecision
 from app.agents.state import DelayedOrderState
-from app.ai.client import client
 from app.core.config import settings
+from app.core.logging import configure_logging
 from app.core.tracing import current_trace_id, traced
 from app.rag.service import retrieve_policy
-from app.agents.guardrails import validate_decision
-
-from langchain_groq import ChatGroq
+from langchain_core.messages import SystemMessage
 from langchain_core.tools import tool
-
-from app.core.logging import configure_logging
+from langchain_groq import ChatGroq
+from langgraph.graph import END, START, StateGraph
+from langgraph.prebuilt import ToolNode
 
 configure_logging()
 
@@ -38,8 +34,8 @@ def get_order(order_id: int) -> str:
         extra={"order_id": order_id},
     )
 
-    from app.core.database import SessionLocal
     from app.agents.tools.order_tools import get_order as db_get_order
+    from app.core.database import SessionLocal
 
     with traced(
         "tool.get_order", tracer_name="delayed_order_agent", order_id=order_id
@@ -62,8 +58,8 @@ def get_shipment(order_id: int) -> str:
         extra={"order_id": order_id},
     )
 
-    from app.core.database import SessionLocal
     from app.agents.tools.shipment_tools import get_shipment as db_get_shipment
+    from app.core.database import SessionLocal
 
     with traced(
         "tool.get_shipment", tracer_name="delayed_order_agent", order_id=order_id
@@ -86,8 +82,8 @@ def get_customer(customer_id: int) -> str:
         extra={"customer_id": customer_id},
     )
 
-    from app.core.database import SessionLocal
     from app.agents.tools.customer_tools import get_customer as db_get_customer
+    from app.core.database import SessionLocal
 
     with traced(
         "tool.get_customer", tracer_name="delayed_order_agent", customer_id=customer_id
@@ -162,8 +158,6 @@ Never invent policy rules.
 
 
 def agent_node(state: DelayedOrderState):
-    messages = state["messages"]
-
     logger.info(
         "Agent execution | order_id=%s | tool_iteration=%s",
         state["order_id"],

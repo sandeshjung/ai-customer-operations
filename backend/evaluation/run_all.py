@@ -4,9 +4,9 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from evaluation.retrieval.evaluate_retrieval import evaluate
 from evaluation.agents.evaluate_delayed_order import evaluate_delayed_order_agent
 from evaluation.agents.evaluate_triage import evaluate_triage_agent
+from evaluation.retrieval.evaluate_retrieval import evaluate
 from evaluation.utils import write_report
 
 

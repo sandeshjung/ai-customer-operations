@@ -1,27 +1,24 @@
 import json
 import time
 
+from app.core.logging import get_logger
 from app.core.redis import redis_client
 from app.events.dead_letter import send_to_dead_letter
 from app.events.idempotency import (
-    try_claim_event,
     release_event_claim,
+    try_claim_event,
 )
 from app.events.publisher import EVENT_STREAM
 from app.workers.config import MAX_RETRIES
 
-from app.core.logging import get_logger
-
 logger = get_logger(__name__)
 
-from app.core.database import SessionLocal
 from app.agents.tools.order_tools import get_order
-
-
-from app.services.agent_service import investigate_delayed_order
-from app.services.triage_service import process_ticket
-from app.services.approval_service import create_approval
+from app.core.database import SessionLocal
 from app.core.tracing import extract_trace_context, traced
+from app.services.agent_service import investigate_delayed_order
+from app.services.approval_service import create_approval
+from app.services.triage_service import process_ticket
 
 CONSUMER_GROUP = "customer_operations_workers"
 CONSUMER_NAME = "worker-1"
@@ -29,7 +26,6 @@ PROCESSING_DELAY_SECONDS = 15
 
 
 def create_consumer_group():
-    db = SessionLocal()
     try:
         redis_client.xgroup_create(
             EVENT_STREAM,
@@ -43,7 +39,6 @@ def create_consumer_group():
 
 
 from app.services.action_service import execute_decision
-from app.agents.tools.order_tools import get_order  # or your order service
 
 
 def process_event(event: dict) -> None:
@@ -212,7 +207,7 @@ def consume_events():
                         success = True
                         break
 
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001 - retry/DLQ boundary must catch any failure from process_event's LLM/DB/Redis calls
                         print(f"Event processing failed (attempt {attempt}): {exc}")
 
                         if attempt < MAX_RETRIES:

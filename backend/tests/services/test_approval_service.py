@@ -2,7 +2,6 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-
 from app.models.customer import Customer
 from app.models.human_approval import ApprovalStatus, HumanApproval
 from app.models.order import Order

@@ -1,9 +1,9 @@
 from collections import defaultdict
 
-from app.rag.retriever import search_policy as vector_search
 from app.rag.bm25 import BM25Retriever
-from app.rag.loader import load_documents
 from app.rag.chunker import chunk_documents
+from app.rag.loader import load_documents
+from app.rag.retriever import search_policy as vector_search
 
 K = 60
 

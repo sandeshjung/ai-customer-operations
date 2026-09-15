@@ -63,7 +63,7 @@ def send_notification(
         backend(recipient, subject, content)
         status = NotificationStatus.SENT
         error = None
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - pluggable backend, any failure mode must be recorded, not crash the order flow
         logger.warning("Notification delivery failed", extra={"error": str(exc)})
         status = NotificationStatus.FAILED
         error = str(exc)

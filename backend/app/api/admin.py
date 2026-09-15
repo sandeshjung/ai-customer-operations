@@ -1,10 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
-
 from app.core.database import get_db
 from app.core.security import require_api_key
 from app.services.approval_service import approve, get_pending_approvals, reject
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 router = APIRouter(
     prefix="/admin", tags=["Admin"], dependencies=[Depends(require_api_key)]

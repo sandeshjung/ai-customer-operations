@@ -1,7 +1,4 @@
-from app.core.database import SessionLocal
 from app.models.support_ticket import SupportTicket
-from app.models.customer import Customer
-from app.models.order import Order
 
 
 def get_ticket(db, ticket_id: int) -> dict:
