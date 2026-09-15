@@ -1,0 +1,44 @@
+# Version control
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Node / frontend — not part of this image, has its own build
+frontent/
+**/node_modules/
+**/dist/
+
+# Jupyter
+.ipynb_checkpoints/
+notebook/
+
+# Local env files (real secrets are passed via docker-compose env_file,
+# never baked into the image)
+.env
+.env.*
+!.env.example
+
+# Evaluation run artifacts
+backend/evaluation/reports/*.json
+backend/evaluation/reports/*.jsonl
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# NOTE: README.md is intentionally NOT excluded here — pyproject.toml
+# declares `readme = "README.md"`, and `uv sync` builds/installs this
+# project itself (uv_build backend), which reads that file. Excluding
+# it would make the build fail on the `uv sync --frozen --no-dev` step
+# that installs the project, not just produce a slightly smaller image.
+CLAUDE.md

@@ -55,6 +55,52 @@ services:
       - "16686:16686" # UI — http://localhost:16686
       - "4318:4318" # OTLP HTTP receiver
 
+  api:
+    build: .
+    container_name: customer-operations-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PASSWORD: customer_admin
+      redis_url: redis://redis:6379/0
+      QDRANT_HOST: qdrant
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    command: >
+      sh -c "uv run alembic -c alembic.ini upgrade head &&
+             uv run uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000"
+
+  worker:
+    build: .
+    container_name: customer-operations-worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PASSWORD: customer_admin
+      redis_url: redis://redis:6379/0
+      QDRANT_HOST: qdrant
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      api:
+        condition: service_started
+    command: ["sh", "backend/scripts/start_worker.sh"]
+
 volumes:
   postgres_data:
   redis_data:
