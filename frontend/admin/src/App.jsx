@@ -78,6 +78,18 @@ export default function App() {
     }
   }
 
+  async function handlePublishDelayedOrders(count) {
+    try {
+      const result = await api.publishDelayedOrders(count);
+      showToast(
+        `Published ${result.published_events} delayed-order event(s) — the worker will pick them up shortly. Approvals/tickets will refresh automatically.`,
+        "ok",
+      );
+    } catch (err) {
+      showToast(`Couldn't publish delayed orders: ${err.message}`, "err");
+    }
+  }
+
   function handleApiBaseChange(value) {
     setApiBaseValue(value);
     setApiBase(value);
@@ -132,7 +144,12 @@ export default function App() {
                 onReview={handleReviewApproval}
               />
         
-        <OrdersSection orders={orders.data} status={orders.status} error={orders.error} />
+        <OrdersSection
+                orders={orders.data}
+                status={orders.status}
+                error={orders.error}
+                onPublish={handlePublishDelayedOrders}
+              />
         
         <TicketsSection 
         tickets={tickets.data} 

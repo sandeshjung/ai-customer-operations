@@ -1,5 +1,6 @@
 from app.core.database import get_db
 from app.core.security import require_api_key
+from app.models.customer import Customer
 from app.services.approval_service import approve, get_pending_approvals, reject
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -18,12 +19,20 @@ class ApprovalReview(BaseModel):
 @router.get("/approvals/pending")
 def list_pending_approvals(db: Session = Depends(get_db)):
     approvals = get_pending_approvals(db)
+
+    customer_ids = {approval.customer_id for approval in approvals}
+    emails_by_customer_id = {
+        customer.id: customer.email
+        for customer in db.query(Customer).filter(Customer.id.in_(customer_ids))
+    }
+
     return [
         {
             "id": approval.id,
             "event_id": approval.event_id,
             "order_id": approval.order_id,
             "customer_id": approval.customer_id,
+            "customer_email": emails_by_customer_id.get(approval.customer_id),
             "agent_name": approval.agent_name,
             "decision": approval.decision,
             "created_at": approval.created_at,

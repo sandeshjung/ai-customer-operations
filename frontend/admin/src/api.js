@@ -70,4 +70,6 @@ export const api = {
     }),
   delayedOrders: () => request("/orders/delayed"),
   tickets: (status) => request("/tickets" + (status ? `?status=${status}` : "")),
+  publishDelayedOrders: (limit) =>
+    request(`/orders/monitor/delayed?limit=${limit}`, { method: "POST" }),
 };

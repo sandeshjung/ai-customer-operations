@@ -10,7 +10,7 @@ from app.models.order import Order
 from sqlalchemy.orm import Session
 
 
-def detect_delayed_orders(db: Session) -> int:
+def detect_delayed_orders(db: Session, limit: int | None = None) -> int:
     today = datetime.now(UTC).date()
 
     delayed_orders = (
@@ -56,5 +56,8 @@ def detect_delayed_orders(db: Session) -> int:
         time.sleep(5)
 
         published += 1
+
+        if limit is not None and published >= limit:
+            break
 
     return published

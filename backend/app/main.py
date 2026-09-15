@@ -1,4 +1,5 @@
 from app.api.admin import router as admin_router
+from app.api.customer_portal import router as customer_portal_router
 from app.api.customers import router as customers_router
 from app.api.health import router as health_router
 from app.api.orders import router as orders_router
@@ -27,6 +28,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ],
@@ -37,6 +40,7 @@ app.add_middleware(
 
 app.include_router(customers_router, prefix=settings.API_V1_PREFIX)
 app.include_router(orders_router, prefix=settings.API_V1_PREFIX)
+app.include_router(customer_portal_router, prefix=settings.API_V1_PREFIX)
 app.include_router(products_router, prefix=settings.API_V1_PREFIX)
 app.include_router(shipments_router, prefix=settings.API_V1_PREFIX)
 app.include_router(tickets_router, prefix=settings.API_V1_PREFIX)

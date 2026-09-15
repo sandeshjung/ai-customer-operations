@@ -1,9 +1,10 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Chevron } from "./Chevron";
+import { PublishDelayedOrders } from "./PublishDelayedOrders";
 
 const PAGE_SIZE = 10;
 
-export function OrdersSection({ orders, status, error }) {
+export function OrdersSection({ orders, status, error, onPublish }) {
   const sorted = useMemo(
     () => (status === "ready" ? [...orders].sort((a, b) => b.delay_days - a.delay_days) : []),
     [orders, status],
@@ -50,8 +51,11 @@ export function OrdersSection({ orders, status, error }) {
   return (
     <section>
       <div className="section-head">
-        <h2>Delayed orders</h2>
-        <span className="count">{status === "ready" ? orders.length : "—"}</span>
+        <div className="section-head-title">
+          <h2>Delayed orders</h2>
+          <span className="count">{status === "ready" ? orders.length : "—"}</span>
+        </div>
+        {onPublish && <PublishDelayedOrders onPublish={onPublish} />}
       </div>
 
       {status === "loading" && <div className="loading">Loading…</div>}
@@ -87,6 +91,7 @@ export function OrdersSection({ orders, status, error }) {
               <tr>
                 <th>Order</th>
                 <th>Customer</th>
+                <th>Email</th>
                 <th>Expected</th>
                 <th>Delay</th>
                 <th>Shipment status</th>
@@ -102,6 +107,7 @@ export function OrdersSection({ orders, status, error }) {
                     <tr>
                       <td>#{o.order_id}</td>
                       <td>#{o.customer_id}</td>
+                      <td className="mono">{o.customer_email}</td>
                       <td>{o.expected_delivery}</td>
                       <td>{o.delay_days}d</td>
                       <td>{o.shipment_status || "no record"}</td>
@@ -120,7 +126,7 @@ export function OrdersSection({ orders, status, error }) {
                     </tr>
                     {isExpanded && (
                       <tr className="detail-row">
-                        <td colSpan={7}>
+                        <td colSpan={8}>
                           <div className="detail-card">
                             <div>
                               <span className="detail-label">Order</span>
@@ -129,6 +135,10 @@ export function OrdersSection({ orders, status, error }) {
                             <div>
                               <span className="detail-label">Customer</span>
                               <strong>#{o.customer_id}</strong>
+                            </div>
+                            <div>
+                              <span className="detail-label">Email</span>
+                              <strong className="mono">{o.customer_email}</strong>
                             </div>
                             <div>
                               <span className="detail-label">Shipment</span>

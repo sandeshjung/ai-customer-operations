@@ -9,7 +9,7 @@ from app.models.product import Product
 from app.schemas.delayed_order import DelayedOrderResponse
 from app.schemas.order import OrderCreate, OrderResponse
 from app.services.order_monitor import detect_delayed_orders
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -26,7 +26,7 @@ def get_delayed_orders(
 
     orders = (
         db.query(Order)
-        .options(selectinload(Order.shipment))
+        .options(selectinload(Order.shipment), selectinload(Order.customer))
         .filter(
             Order.expected_delivery.is_not(None),
             Order.expected_delivery < today,
@@ -52,6 +52,7 @@ def get_delayed_orders(
             DelayedOrderResponse(
                 order_id=order.id,
                 customer_id=order.customer_id,
+                customer_email=order.customer.email,
                 expected_delivery=order.expected_delivery,
                 delay_days=delay_days,
                 shipment_status=(shipment.status if shipment else None),
@@ -160,7 +161,10 @@ def create_order(
         Depends(rate_limit("monitor_delayed", max_requests=5, window_seconds=60)),
     ],
 )
-def monitor_delayed_orders(db: Session = Depends(get_db)):
-    published = detect_delayed_orders(db)
+def monitor_delayed_orders(
+    limit: int | None = Query(default=None, gt=0),
+    db: Session = Depends(get_db),
+):
+    published = detect_delayed_orders(db, limit=limit)
 
     return {"published_events": published}

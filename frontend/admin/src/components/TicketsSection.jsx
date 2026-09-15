@@ -108,6 +108,7 @@ export function TicketsSection({ tickets, status, error, statusFilter, onStatusF
                 <th>ID</th>
                 <th>Subject</th>
                 <th>Customer</th>
+                <th>Email</th>
                 <th>Order</th>
                 <th>Priority</th>
                 <th>Status</th>
@@ -124,6 +125,7 @@ export function TicketsSection({ tickets, status, error, statusFilter, onStatusF
                       <td>#{t.id}</td>
                       <td className="subject">{t.subject}</td>
                       <td>#{t.customer_id}</td>
+                      <td className="mono">{t.customer_email}</td>
                       <td>{t.order_id ? `#${t.order_id}` : "—"}</td>
                       <td>
                         <Badge kind="pri" value={t.priority} />
@@ -146,7 +148,7 @@ export function TicketsSection({ tickets, status, error, statusFilter, onStatusF
                     </tr>
                     {isExpanded && (
                       <tr className="detail-row">
-                        <td colSpan={8}>
+                        <td colSpan={9}>
                           <div className="detail-card">
                             <div>
                               <span className="detail-label">Subject</span>
@@ -155,6 +157,10 @@ export function TicketsSection({ tickets, status, error, statusFilter, onStatusF
                             <div>
                               <span className="detail-label">Customer</span>
                               <strong>#{t.customer_id}</strong>
+                            </div>
+                            <div>
+                              <span className="detail-label">Email</span>
+                              <strong className="mono">{t.customer_email}</strong>
                             </div>
                             <div>
                               <span className="detail-label">Order</span>

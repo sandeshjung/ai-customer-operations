@@ -26,6 +26,7 @@ export function ApprovalCard({ approval, onReview }) {
                   <Badge kind="sev" value={severity} />
                   <span className="mono">order #{approval.order_id}</span>
                   <span className="mono">customer #{approval.customer_id}</span>
+                  <span className="mono">{approval.customer_email}</span>
                   <span>{approval.agent_name}</span>
                   <span>{relativeTime(approval.created_at)}</span>
                   {traceUrl && (
