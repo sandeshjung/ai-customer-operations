@@ -63,3 +63,6 @@ backend/evaluation/reports/*.jsonl
 backend/evaluation/reports/*.json
 backend/evaluation/reports/*.jsonl
 !backend/evaluation/reports/.gitkeep
+
+.claude/
+CLAUDE.md

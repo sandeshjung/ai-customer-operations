@@ -108,3 +108,8 @@ Trace context propagates across the async event boundary: when the delay agent's
 - No worker process supervision/restart policy.
 - Rate limiting is fixed-window (not sliding-window/token-bucket) — good enough to stop accidental abuse, not a determined attacker.
 - Prompt-injection mitigation on the triage agent (delimiting customer content, explicit system-prompt instruction) is real but unverified against an actual model — no automated test can confirm the LLM *obeys* the instruction without a paid API call. Treat it as a mitigation, not a guarantee.
+
+
+## Git
+Never run `git commit` or `git push` unless explicitly asked in the current
+message. Leave changes staged/unstaged for review.
