@@ -76,7 +76,9 @@ class TestProcessTicket:
             patch.object(triage_service, "triage_graph") as mock_graph,
         ):
             mock_graph.invoke.return_value = {"decision": decision}
-            result = triage_service.process_ticket(db=db_session, ticket_id=ticket.id, event_id="evt-1")
+            result = triage_service.process_ticket(
+                db=db_session, ticket_id=ticket.id, event_id="evt-1"
+            )
 
         db_session.refresh(ticket)
         assert ticket.priority == TicketPriority.HIGH
@@ -91,21 +93,27 @@ class TestProcessTicket:
             patch.object(triage_service, "triage_graph") as mock_graph,
         ):
             mock_graph.invoke.return_value = {"decision": decision}
-            triage_service.process_ticket(db=db_session, ticket_id=ticket.id, event_id="evt-1")
+            triage_service.process_ticket(
+                db=db_session, ticket_id=ticket.id, event_id="evt-1"
+            )
 
         db_session.refresh(ticket)
         assert ticket.priority == TicketPriority.CRITICAL
 
     def test_auto_resolves_on_resolve_action(self, db_session):
         ticket = _make_ticket(db_session, status=TicketStatus.OPEN)
-        decision = _fake_decision(action="RESOLVE", requires_human=False, priority=DecisionPriority.LOW)
+        decision = _fake_decision(
+            action="RESOLVE", requires_human=False, priority=DecisionPriority.LOW
+        )
 
         with (
             patch.dict(sys.modules, {"app.rag.service": _stub_rag_service()}),
             patch.object(triage_service, "triage_graph") as mock_graph,
         ):
             mock_graph.invoke.return_value = {"decision": decision}
-            triage_service.process_ticket(db=db_session, ticket_id=ticket.id, event_id="evt-1")
+            triage_service.process_ticket(
+                db=db_session, ticket_id=ticket.id, event_id="evt-1"
+            )
 
         db_session.refresh(ticket)
         assert ticket.status == TicketStatus.RESOLVED
@@ -114,20 +122,26 @@ class TestProcessTicket:
         """A RESOLVE action that still requires human review shouldn't
         silently close the ticket."""
         ticket = _make_ticket(db_session, status=TicketStatus.OPEN)
-        decision = _fake_decision(action="RESOLVE", requires_human=True, priority=DecisionPriority.LOW)
+        decision = _fake_decision(
+            action="RESOLVE", requires_human=True, priority=DecisionPriority.LOW
+        )
 
         with (
             patch.dict(sys.modules, {"app.rag.service": _stub_rag_service()}),
             patch.object(triage_service, "triage_graph") as mock_graph,
         ):
             mock_graph.invoke.return_value = {"decision": decision}
-            triage_service.process_ticket(db=db_session, ticket_id=ticket.id, event_id="evt-1")
+            triage_service.process_ticket(
+                db=db_session, ticket_id=ticket.id, event_id="evt-1"
+            )
 
         db_session.refresh(ticket)
         assert ticket.status == TicketStatus.OPEN
 
     def test_missing_ticket_returns_none_without_raising(self, db_session):
         with patch.dict(sys.modules, {"app.rag.service": _stub_rag_service()}):
-            result = triage_service.process_ticket(db=db_session, ticket_id=99999, event_id="evt-1")
+            result = triage_service.process_ticket(
+                db=db_session, ticket_id=99999, event_id="evt-1"
+            )
 
         assert result is None

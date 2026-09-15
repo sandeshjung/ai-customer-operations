@@ -9,9 +9,7 @@ router = APIRouter(prefix="/products", tags=["Products"])
 
 
 @router.post(
-    "",
-    response_model=ProductResponse,
-    dependencies=[Depends(require_api_key)]
+    "", response_model=ProductResponse, dependencies=[Depends(require_api_key)]
 )
 def create_product(
     data: ProductCreate,

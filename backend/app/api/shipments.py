@@ -14,7 +14,7 @@ router = APIRouter(prefix="/shipments", tags=["Shipments"])
 @router.post(
     "/{order_id}",
     response_model=ShipmentResponse,
-    dependencies=[Depends(require_api_key)]
+    dependencies=[Depends(require_api_key)],
 )
 def create_shipment(
     order_id: int,

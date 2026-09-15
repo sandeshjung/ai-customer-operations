@@ -5,6 +5,7 @@ Revises: e69e0049899f
 Create Date: 2026-09-05 10:17:06.112465
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -12,8 +13,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '44d340f27fe8'
-down_revision: Union[str, Sequence[str], None] = 'e69e0049899f'
+revision: str = "44d340f27fe8"
+down_revision: Union[str, Sequence[str], None] = "e69e0049899f"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -26,16 +27,30 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("event_id", sa.String(length=100), nullable=False),
         sa.Column("order_id", sa.Integer(), sa.ForeignKey("orders.id"), nullable=False),
-        sa.Column("customer_id", sa.Integer(), sa.ForeignKey("customers.id"), nullable=False),
+        sa.Column(
+            "customer_id", sa.Integer(), sa.ForeignKey("customers.id"), nullable=False
+        ),
         sa.Column("agent_name", sa.String(length=50), nullable=False),
         sa.Column("decision", sa.JSON(), nullable=False),
-        sa.Column("status", sa.String(length=20), nullable=False, server_default=sa.text("'PENDING'")),
+        sa.Column(
+            "status",
+            sa.String(length=20),
+            nullable=False,
+            server_default=sa.text("'PENDING'"),
+        ),
         sa.Column("reviewer_notes", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at", sa.DateTime(), nullable=False, server_default=sa.text("now()")
+        ),
         sa.Column("reviewed_at", sa.DateTime(), nullable=True),
         sa.Column("reviewed_by", sa.String(length=100), nullable=True),
     )
-    op.create_index(op.f("ix_human_approvals_event_id"), "human_approvals", ["event_id"], unique=False)
+    op.create_index(
+        op.f("ix_human_approvals_event_id"),
+        "human_approvals",
+        ["event_id"],
+        unique=False,
+    )
     # ### end Alembic commands ###
 
 

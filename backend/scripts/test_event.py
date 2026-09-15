@@ -13,7 +13,7 @@ event = Event(
     data={
         "order_id": 123,
         "customer_id": 456,
-    }
+    },
 )
 
 message_id = publish_event(event)

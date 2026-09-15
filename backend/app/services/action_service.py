@@ -64,7 +64,7 @@ def execute_decision(
             subject=f"Follow-up: track shipment ({decision.severity.value})",
             message=decision.reasoning,
             priority=priority_map.get(decision.severity, TicketPriority.LOW),
-            status=TicketStatus.OPEN
+            status=TicketStatus.OPEN,
         )
         db.add(ticket)
         actions.append("shipment_tracking_ticket_created")
@@ -76,7 +76,7 @@ def execute_decision(
             subject=f"Follow-up: contact carrier ({decision.severity.value})",
             message=decision.reasoning,
             priority=priority_map.get(decision.severity, TicketPriority.MEDIUM),
-            status=TicketStatus.OPEN
+            status=TicketStatus.OPEN,
         )
         db.add(ticket)
         actions.append("carrier_contact_ticket_created")
@@ -91,10 +91,10 @@ def execute_decision(
         db.refresh(ticket)
 
         if decision.resolution in _TRIAGE_WORTHY_RESOLUTIONS:
-        # Publish event so Triage Agent can pick it up. trace_context lets
-        # the consumer continue this same trace instead of starting a new
-        # one — call inject_trace_context() here, while the span for this
-        # request/event is still the active one, not later in the consumer.
+            # Publish event so Triage Agent can pick it up. trace_context lets
+            # the consumer continue this same trace instead of starting a new
+            # one — call inject_trace_context() here, while the span for this
+            # request/event is still the active one, not later in the consumer.
             event = Event(
                 event_id=str(uuid4()),
                 event_type=EventType.TICKET_CREATED,
@@ -118,7 +118,7 @@ def execute_decision(
                 "ticket_id": ticket.id,
                 "order_id": order_id,
                 "resolution": decision.resolution,
-                "triaged": decision.resolution in _TRIAGE_WORTHY_RESOLUTIONS
+                "triaged": decision.resolution in _TRIAGE_WORTHY_RESOLUTIONS,
             },
         )
 
@@ -128,10 +128,12 @@ def execute_decision(
             customer_id=customer_id,
             order_id=order_id,
             subject="An update on your order",
-            content=decision.customer_message
+            content=decision.customer_message,
         )
         actions.append(
-            "customer_notified" if notification.status == "SENT" else "customer_notification_failed"
+            "customer_notified"
+            if notification.status == "SENT"
+            else "customer_notification_failed"
         )
 
     return {

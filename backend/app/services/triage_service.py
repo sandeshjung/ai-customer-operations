@@ -6,6 +6,7 @@ from app.core.tracing import traced
 
 logger = get_logger(__name__)
 
+
 def process_ticket(db, ticket_id: int, event_id: str):
     from app.agents.tools.ticket_tools import get_ticket, get_customer_tickets
     from app.rag.service import retrieve_policy
@@ -18,7 +19,9 @@ def process_ticket(db, ticket_id: int, event_id: str):
     ) as span:
         ticket = get_ticket(db, ticket_id)
         if "error" in ticket:
-            logger.warning("Ticket not found for triage", extra={"ticket_id": ticket_id})
+            logger.warning(
+                "Ticket not found for triage", extra={"ticket_id": ticket_id}
+            )
             span.set_attribute("found", False)
             return
 
@@ -31,12 +34,14 @@ def process_ticket(db, ticket_id: int, event_id: str):
         policy_context = "\n\n".join([r["content"] for r in policy_results])
 
         # Run triage agent
-        result = triage_graph.invoke({
-            "ticket_id": ticket_id,
-            "ticket": ticket,
-            "customer_history": history,
-            "policy_context": policy_context
-        })
+        result = triage_graph.invoke(
+            {
+                "ticket_id": ticket_id,
+                "ticket": ticket,
+                "customer_history": history,
+                "policy_context": policy_context,
+            }
+        )
 
         decision = result["decision"]
 
@@ -71,7 +76,10 @@ def process_ticket(db, ticket_id: int, event_id: str):
             }
             triage_priority = priority_map.get(decision.priority)
             current_priority = TicketPriority(db_ticket.priority)
-            if triage_priority and priority_rank[triage_priority] > priority_rank[current_priority]:
+            if (
+                triage_priority
+                and priority_rank[triage_priority] > priority_rank[current_priority]
+            ):
                 db_ticket.priority = triage_priority.value
 
             # Auto resolve simple cases
@@ -89,7 +97,7 @@ def process_ticket(db, ticket_id: int, event_id: str):
             "priority": decision.priority,
             "action": decision.action,
             "trace_id": decision.trace_id,
-        }
+        },
     )
 
     return decision

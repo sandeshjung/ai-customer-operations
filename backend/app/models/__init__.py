@@ -19,5 +19,5 @@ __all__ = [
     "SupportTicket",
     "AgentExecution",
     "HumanApproval",
-    "Notification"
+    "Notification",
 ]

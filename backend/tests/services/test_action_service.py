@@ -43,7 +43,10 @@ class TestExecuteDecisionEscalate:
 
         with patch.object(action_service, "publish_event") as mock_publish:
             result = action_service.execute_decision(
-                db=db_session, order_id=order.id, customer_id=customer.id, decision=decision
+                db=db_session,
+                order_id=order.id,
+                customer_id=customer.id,
+                decision=decision,
             )
 
         assert "escalation_ticket_created" in result["actions"]
@@ -73,7 +76,10 @@ class TestExecuteDecisionContactCustomer:
 
         with patch.object(action_service, "publish_event"):
             result = action_service.execute_decision(
-                db=db_session, order_id=order.id, customer_id=customer.id, decision=decision
+                db=db_session,
+                order_id=order.id,
+                customer_id=customer.id,
+                decision=decision,
             )
 
         assert "customer_contact_ticket_created" in result["actions"]
@@ -91,7 +97,10 @@ class TestExecuteDecisionContactCustomer:
 
         with patch.object(action_service, "publish_event"):
             result = action_service.execute_decision(
-                db=db_session, order_id=order.id, customer_id=customer.id, decision=decision
+                db=db_session,
+                order_id=order.id,
+                customer_id=customer.id,
+                decision=decision,
             )
 
         ticket = db_session.get(SupportTicket, result["ticket_id"])
@@ -107,11 +116,16 @@ class TestExecuteDecisionTrackShipment:
 
     def test_creates_internal_ticket_without_triaging(self, db_session):
         customer, order = _make_customer_and_order(db_session)
-        decision = _decision(resolution="TRACK_SHIPMENT", severity="LOW", requires_human=False)
+        decision = _decision(
+            resolution="TRACK_SHIPMENT", severity="LOW", requires_human=False
+        )
 
         with patch.object(action_service, "publish_event") as mock_publish:
             result = action_service.execute_decision(
-                db=db_session, order_id=order.id, customer_id=customer.id, decision=decision
+                db=db_session,
+                order_id=order.id,
+                customer_id=customer.id,
+                decision=decision,
             )
 
         assert result["actions"] == ["shipment_tracking_ticket_created"]
@@ -127,11 +141,16 @@ class TestExecuteDecisionTrackShipment:
 class TestExecuteDecisionContactCarrier:
     def test_creates_internal_ticket_without_triaging(self, db_session):
         customer, order = _make_customer_and_order(db_session)
-        decision = _decision(resolution="CONTACT_CARRIER", severity="HIGH", requires_human=True)
+        decision = _decision(
+            resolution="CONTACT_CARRIER", severity="HIGH", requires_human=True
+        )
 
         with patch.object(action_service, "publish_event") as mock_publish:
             result = action_service.execute_decision(
-                db=db_session, order_id=order.id, customer_id=customer.id, decision=decision
+                db=db_session,
+                order_id=order.id,
+                customer_id=customer.id,
+                decision=decision,
             )
 
         assert result["actions"] == ["carrier_contact_ticket_created"]
@@ -146,11 +165,16 @@ class TestExecuteDecisionContactCarrier:
 class TestExecuteDecisionNoAction:
     def test_records_no_action_taken_and_creates_no_ticket(self, db_session):
         customer, order = _make_customer_and_order(db_session)
-        decision = _decision(resolution="NO_ACTION", severity="LOW", requires_human=False)
+        decision = _decision(
+            resolution="NO_ACTION", severity="LOW", requires_human=False
+        )
 
         with patch.object(action_service, "publish_event") as mock_publish:
             result = action_service.execute_decision(
-                db=db_session, order_id=order.id, customer_id=customer.id, decision=decision
+                db=db_session,
+                order_id=order.id,
+                customer_id=customer.id,
+                decision=decision,
             )
 
         assert result["actions"] == ["no_action_taken"]
@@ -173,11 +197,16 @@ class TestCustomerNotification:
 
         with patch.object(action_service, "publish_event"):
             result = action_service.execute_decision(
-                db=db_session, order_id=order.id, customer_id=customer.id, decision=decision
+                db=db_session,
+                order_id=order.id,
+                customer_id=customer.id,
+                decision=decision,
             )
 
         assert "customer_notified" in result["actions"]
-        notifications = db_session.query(Notification).filter_by(customer_id=customer.id).all()
+        notifications = (
+            db_session.query(Notification).filter_by(customer_id=customer.id).all()
+        )
         assert len(notifications) == 1
         assert notifications[0].content == "We're keeping an eye on your shipment."
         assert notifications[0].status == "SENT"
@@ -189,11 +218,17 @@ class TestCustomerNotification:
 
         with patch.object(action_service, "publish_event"):
             result = action_service.execute_decision(
-                db=db_session, order_id=order.id, customer_id=customer.id, decision=decision
+                db=db_session,
+                order_id=order.id,
+                customer_id=customer.id,
+                decision=decision,
             )
 
         assert "customer_notified" not in result["actions"]
-        assert db_session.query(Notification).filter_by(customer_id=customer.id).count() == 0
+        assert (
+            db_session.query(Notification).filter_by(customer_id=customer.id).count()
+            == 0
+        )
 
     def test_notification_failure_does_not_break_execution(self, db_session):
         customer, order = _make_customer_and_order(db_session)
@@ -209,10 +244,15 @@ class TestCustomerNotification:
             patch.dict(notification_service._BACKENDS, {"log": _raise}),
         ):
             result = action_service.execute_decision(
-                db=db_session, order_id=order.id, customer_id=customer.id, decision=decision
+                db=db_session,
+                order_id=order.id,
+                customer_id=customer.id,
+                decision=decision,
             )
 
         assert "customer_notification_failed" in result["actions"]
-        notification = db_session.query(Notification).filter_by(customer_id=customer.id).one()
+        notification = (
+            db_session.query(Notification).filter_by(customer_id=customer.id).one()
+        )
         assert notification.status == "FAILED"
         assert notification.error == "smtp down"

@@ -10,6 +10,7 @@ from app.events.types import EventType
 from app.models.order import Order
 from app.core.redis import redis_client
 
+
 def detect_delayed_orders(db: Session) -> int:
     today = date.today()
 
@@ -17,9 +18,7 @@ def detect_delayed_orders(db: Session) -> int:
         db.query(Order)
         .filter(
             Order.expected_delivery < today,
-            Order.status.notin_(
-                ["DELIVERED", "CANCELLED", "REFUNDED"]
-            )
+            Order.status.notin_(["DELIVERED", "CANCELLED", "REFUNDED"]),
         )
         .all()
     )
@@ -27,16 +26,9 @@ def detect_delayed_orders(db: Session) -> int:
     published = 0
 
     for order in delayed_orders:
+        delay_days = (today - order.expected_delivery).days
 
-        delay_days = (
-            today - order.expected_delivery
-        ).days
-
-        event_key = (
-            f"delayed_order:"
-            f"{order.id}:"
-            f"{today.isoformat()}"
-        )
+        event_key = f"delayed_order:{order.id}:{today.isoformat()}"
 
         if redis_client.exists(event_key):
             continue
@@ -49,11 +41,9 @@ def detect_delayed_orders(db: Session) -> int:
             data={
                 "order_id": order.id,
                 "customer_id": order.customer_id,
-                "expected_delivery": (
-                    order.expected_delivery.isoformat()
-                ),
-                "delay_days": delay_days
-            }
+                "expected_delivery": (order.expected_delivery.isoformat()),
+                "delay_days": delay_days,
+            },
         )
 
         publish_event(event)

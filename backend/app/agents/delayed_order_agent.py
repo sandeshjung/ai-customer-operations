@@ -1,4 +1,4 @@
-import json 
+import json
 
 from app.agents.context import DelayedOrderContext
 from app.agents.models import AgentDecision
@@ -37,6 +37,7 @@ The JSON must contain exactly these fields:
 }
 """
 
+
 def analyze_delayed_order(
     context: DelayedOrderContext,
 ) -> AgentDecision:
@@ -64,8 +65,6 @@ def analyze_delayed_order(
     try:
         data = json.loads(content)
     except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"LLM returned invalid JSON: {content}"
-        ) from exc
+        raise ValueError(f"LLM returned invalid JSON: {content}") from exc
 
     return AgentDecision.model_validate(data)

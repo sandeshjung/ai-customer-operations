@@ -128,9 +128,15 @@ def evaluate_delayed_order_agent():
     total = completed or 1
 
     print(f"\nCompleted: {completed}/{len(scenarios)} (failed: {len(failed)})")
-    print(f"Severity Accuracy:     {correct_severity}/{completed} = {correct_severity / total:.1%}")
-    print(f"Resolution Accuracy:   {correct_resolution}/{completed} = {correct_resolution / total:.1%}")
-    print(f"Escalation Accuracy:   {correct_human}/{completed} = {correct_human / total:.1%}")
+    print(
+        f"Severity Accuracy:     {correct_severity}/{completed} = {correct_severity / total:.1%}"
+    )
+    print(
+        f"Resolution Accuracy:   {correct_resolution}/{completed} = {correct_resolution / total:.1%}"
+    )
+    print(
+        f"Escalation Accuracy:   {correct_human}/{completed} = {correct_human / total:.1%}"
+    )
 
     return {
         "total_scenarios": len(scenarios),

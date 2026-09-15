@@ -8,11 +8,7 @@ def get_customer(
     customer_id: int,
 ) -> dict | None:
 
-    customer = (
-        db.query(Customer)
-        .filter(Customer.id == customer_id)
-        .first()
-    )
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
 
     if not customer:
         return None

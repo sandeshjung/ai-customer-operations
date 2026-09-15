@@ -3,6 +3,7 @@ from pypdf import PdfReader
 
 KNOWLEDGE_DIR = Path("data/knowledge")
 
+
 def load_documents() -> list[dict]:
     documents = []
 
@@ -14,10 +15,12 @@ def load_documents() -> list[dict]:
             if text.strip():
                 pages.append({"page": page_number, "text": text})
 
-        documents.append({          # ← moved outside the page loop
-            "source": path.name,
-            "document_type": "policy",
-            "pages": pages
-        })
+        documents.append(
+            {  # ← moved outside the page loop
+                "source": path.name,
+                "document_type": "policy",
+                "pages": pages,
+            }
+        )
 
     return documents

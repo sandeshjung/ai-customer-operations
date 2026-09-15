@@ -15,7 +15,9 @@ def retrieve_policy(query: str, limit: int = 5) -> list[dict]:
     cache_key = query.lower().strip()[:50]
 
     hits_before = retrieve_policy_cached.cache_info().hits
-    with traced("rag.retrieve_policy", tracer_name="rag", query=query[:200], limit=limit) as span:
+    with traced(
+        "rag.retrieve_policy", tracer_name="rag", query=query[:200], limit=limit
+    ) as span:
         results = retrieve_policy_cached(cache_key, limit=limit)
         cache_hit = retrieve_policy_cached.cache_info().hits > hits_before
         span.set_attribute("cache_hit", cache_hit)

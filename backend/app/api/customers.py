@@ -12,9 +12,7 @@ router = APIRouter(
 
 
 @router.post(
-    "",
-    response_model=CustomerResponse,
-    dependencies=[Depends(require_api_key)]
+    "", response_model=CustomerResponse, dependencies=[Depends(require_api_key)]
 )
 def create_customer(
     data: CustomerCreate,

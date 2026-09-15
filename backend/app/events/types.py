@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class EventType(StrEnum):
     ORDER_CREATED = "ORDER_CREATED"
     ORDER_DELAYED = "ORDER_DELAYED"

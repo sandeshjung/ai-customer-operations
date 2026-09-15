@@ -21,7 +21,9 @@ def evaluate():
     (which needs an LLM to judge groundedness) lives in a separate,
     opt-in script — see evaluate_faithfulness.py.
     """
-    with open("backend/evaluation/datasets/rag_questions.json", encoding="utf-8") as file:
+    with open(
+        "backend/evaluation/datasets/rag_questions.json", encoding="utf-8"
+    ) as file:
         dataset = json.load(file)
 
     correct = 0

@@ -93,11 +93,7 @@ def get_order(
     return order
 
 
-@router.post(
-    "",
-    response_model=OrderResponse,
-    dependencies=[Depends(require_api_key)]
-)
+@router.post("", response_model=OrderResponse, dependencies=[Depends(require_api_key)])
 def create_order(
     data: OrderCreate,
     db: Session = Depends(get_db),
@@ -162,14 +158,13 @@ def create_order(
 
 
 @router.post(
-        "/monitor/delayed",
-        dependencies=[
-            Depends(require_api_key),
-            Depends(rate_limit("monitor_delayed", max_requests=5, window_seconds=60))
-        ])
+    "/monitor/delayed",
+    dependencies=[
+        Depends(require_api_key),
+        Depends(rate_limit("monitor_delayed", max_requests=5, window_seconds=60)),
+    ],
+)
 def monitor_delayed_orders(db: Session = Depends(get_db)):
     published = detect_delayed_orders(db)
 
-    return {
-        "published_events": published
-    }
+    return {"published_events": published}

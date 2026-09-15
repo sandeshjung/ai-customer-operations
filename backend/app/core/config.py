@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     NOTIFICATION_BACKEND: str = "log"
 
-    ADMIN_API_KEY: str | None = None 
+    ADMIN_API_KEY: str | None = None
 
     RATE_LIMIT_ENABLED: bool = True
 

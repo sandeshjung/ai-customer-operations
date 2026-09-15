@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 
+
 class DelayedOrderContext(BaseModel):
     order: dict | None = None
     shipment: dict | None = None

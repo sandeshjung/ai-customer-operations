@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 _configured = False
 
+
 def _parse_headers(raw: str | None) -> dict[str, str]:
     """Parse the standard OTEL_EXPORTER_OTLP_HEADERS format: 'k1=v1,k2=v2'."""
     headers: dict[str, str] = {}
@@ -52,6 +53,7 @@ def _parse_headers(raw: str | None) -> dict[str, str]:
         key, _, value = pair.partition("=")
         headers[key.strip()] = value.strip()
     return headers
+
 
 def basic_auth_header(public_key: str, secret_key: str) -> str:
     """Build the 'Authorization=Basic ...' value Langfuse's OTLP endpoint expects."""
@@ -70,7 +72,9 @@ def setup_tracing(service_name: str | None = None) -> None:
         _configured = True
         return
 
-    resource = Resource.create({SERVICE_NAME: service_name or settings.OTEL_SERVICE_NAME})
+    resource = Resource.create(
+        {SERVICE_NAME: service_name or settings.OTEL_SERVICE_NAME}
+    )
     provider = TracerProvider(resource=resource)
 
     endpoint = settings.OTEL_EXPORTER_OTLP_ENDPOINT.rstrip("/") + "/v1/traces"
@@ -82,7 +86,11 @@ def setup_tracing(service_name: str | None = None) -> None:
     trace.set_tracer_provider(provider)
     _configured = True
 
-    logger.info("Tracing configured | endpoint=%s | service=%s", endpoint, resource.attributes[SERVICE_NAME])
+    logger.info(
+        "Tracing configured | endpoint=%s | service=%s",
+        endpoint,
+        resource.attributes[SERVICE_NAME],
+    )
 
 
 def get_tracer(name: str):
@@ -98,7 +106,14 @@ class traced:
             span.set_attribute("severity", decision.severity)
     """
 
-    def __init__(self, name: str, tracer_name: str = "app", parent_context=None, links=None, **attributes):
+    def __init__(
+        self,
+        name: str,
+        tracer_name: str = "app",
+        parent_context=None,
+        links=None,
+        **attributes,
+    ):
         self._tracer = get_tracer(tracer_name)
         self._name = name
         self._attributes = {k: v for k, v in attributes.items() if v is not None}

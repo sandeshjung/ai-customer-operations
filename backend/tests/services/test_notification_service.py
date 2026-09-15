@@ -53,7 +53,9 @@ class TestSendNotification:
 
         assert notification.order_id == 42
 
-    def test_unknown_customer_records_failed_notification_without_raising(self, db_session):
+    def test_unknown_customer_records_failed_notification_without_raising(
+        self, db_session
+    ):
         notification = notification_service.send_notification(
             db=db_session, customer_id=999999, content="test"
         )
@@ -62,10 +64,14 @@ class TestSendNotification:
         assert notification.error == "Customer not found"
         assert notification.recipient == "unknown"
 
-    def test_unknown_backend_falls_back_to_log_instead_of_dropping_message(self, db_session):
+    def test_unknown_backend_falls_back_to_log_instead_of_dropping_message(
+        self, db_session
+    ):
         customer = _make_customer(db_session)
 
-        with patch.object(notification_service.settings, "NOTIFICATION_BACKEND", "sendgrid"):
+        with patch.object(
+            notification_service.settings, "NOTIFICATION_BACKEND", "sendgrid"
+        ):
             notification = notification_service.send_notification(
                 db=db_session, customer_id=customer.id, content="test"
             )
@@ -90,8 +96,12 @@ class TestSendNotification:
         """Notifications should accumulate as a history, not overwrite."""
         customer = _make_customer(db_session)
 
-        notification_service.send_notification(db=db_session, customer_id=customer.id, content="first")
-        notification_service.send_notification(db=db_session, customer_id=customer.id, content="second")
+        notification_service.send_notification(
+            db=db_session, customer_id=customer.id, content="first"
+        )
+        notification_service.send_notification(
+            db=db_session, customer_id=customer.id, content="second"
+        )
 
         rows = db_session.query(Notification).filter_by(customer_id=customer.id).all()
         assert len(rows) == 2

@@ -45,9 +45,13 @@ def create_consumer_group():
 from app.services.action_service import execute_decision
 from app.agents.tools.order_tools import get_order  # or your order service
 
+
 def process_event(event: dict) -> None:
     db = SessionLocal()
-    logger.info("Processing event", extra={"event_id": event["event_id"], "event_type": event["event_type"]})
+    logger.info(
+        "Processing event",
+        extra={"event_id": event["event_id"], "event_type": event["event_type"]},
+    )
 
     try:
         with traced(
@@ -63,7 +67,7 @@ def process_event(event: dict) -> None:
                     db=db,
                     order_id=data["order_id"],
                     delay_days=data["delay_days"],
-                    event_id=event["event_id"]
+                    event_id=event["event_id"],
                 )
 
                 # Fetch customer_id from order
@@ -88,7 +92,10 @@ def process_event(event: dict) -> None:
                     )
                     logger.info(
                         "Human approval required — action paused",
-                        extra={"event_id": event["event_id"], "order_id": data["order_id"]},
+                        extra={
+                            "event_id": event["event_id"],
+                            "order_id": data["order_id"],
+                        },
                     )
                 else:
                     result = execute_decision(
@@ -147,6 +154,7 @@ def process_event(event: dict) -> None:
     # finally:
     #     db.close()
 
+
 def consume_events():
     create_consumer_group()
 
@@ -177,10 +185,7 @@ def consume_events():
                 # racing a still-in-flight first attempt) could both see
                 # "not yet processed" and both act on the same event.
                 if not try_claim_event(event_id):
-                    print(
-                        f"Skipping already claimed/processed event: "
-                        f"{event_id}"
-                    )
+                    print(f"Skipping already claimed/processed event: {event_id}")
 
                     redis_client.xack(
                         EVENT_STREAM,
@@ -194,11 +199,7 @@ def consume_events():
 
                 for attempt in range(1, MAX_RETRIES + 1):
                     try:
-                        print(
-                            f"Processing attempt "
-                            f"{attempt}/{MAX_RETRIES}: "
-                            f"{event_id}"
-                        )
+                        print(f"Processing attempt {attempt}/{MAX_RETRIES}: {event_id}")
 
                         process_event(event)
 
@@ -212,10 +213,7 @@ def consume_events():
                         break
 
                     except Exception as exc:
-                        print(
-                            f"Event processing failed "
-                            f"(attempt {attempt}): {exc}"
-                        )
+                        print(f"Event processing failed (attempt {attempt}): {exc}")
 
                         if attempt < MAX_RETRIES:
                             time.sleep(2)
@@ -241,9 +239,6 @@ def consume_events():
                 time.sleep(15)
 
                 if not success:
-                    print(
-                        f"Event moved to DLQ: "
-                        f"{event_id}"
-                    )
+                    print(f"Event moved to DLQ: {event_id}")
 
                 time.sleep(PROCESSING_DELAY_SECONDS)

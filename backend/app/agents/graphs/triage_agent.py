@@ -64,16 +64,16 @@ def triage_node(state: TriageState):
     prompt = f"""
 TICKET:
 <customer_content>
-Subject: {ticket['subject']}
-Message: {ticket['message']}
+Subject: {ticket["subject"]}
+Message: {ticket["message"]}
 </customer_content>
-Current Priority: {ticket['priority']}
+Current Priority: {ticket["priority"]}
 
 CUSTOMER HISTORY:
 {json.dumps(history, indent=2)[:800]}
 
 POLICY CONTEXT:
-{state.get('policy_context', 'No policy retrieved')}
+{state.get("policy_context", "No policy retrieved")}
 
 Return JSON:
 {{
@@ -94,10 +94,12 @@ Return JSON:
         ticket_id=state["ticket_id"],
         model=settings.LLM_MODEL,
     ) as span:
-        response = llm.invoke([
-            SystemMessage(content=SYSTEM_PROMPT),
-            SystemMessage(content=prompt),
-        ])
+        response = llm.invoke(
+            [
+                SystemMessage(content=SYSTEM_PROMPT),
+                SystemMessage(content=prompt),
+            ]
+        )
         usage = getattr(response, "usage_metadata", None)
         if usage:
             span.set_attribute("llm.input_tokens", usage.get("input_tokens", 0))
@@ -122,7 +124,7 @@ Return JSON:
     try:
         decision_data = json.loads(content)
     except json.JSONDecodeError:
-        match = re.search(r'\{.*\}', content, re.DOTALL)
+        match = re.search(r"\{.*\}", content, re.DOTALL)
         if not match:
             logger.error(
                 "No JSON found in triage response | content=%s",
@@ -153,5 +155,6 @@ def build_triage_graph():
     builder.add_edge(START, "triage")
     builder.add_edge("triage", END)
     return builder.compile()
+
 
 triage_graph = build_triage_graph()

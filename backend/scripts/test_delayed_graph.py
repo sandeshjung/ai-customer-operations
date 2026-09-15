@@ -8,10 +8,7 @@ result = delayed_order_graph.invoke(
         "messages": [
             {
                 "role": "user",
-                "content": (
-                    "Investigate delayed order 10024. "
-                    "It is 11 days late."
-                ),
+                "content": ("Investigate delayed order 10024. It is 11 days late."),
             }
         ],
         "order_id": 10024,

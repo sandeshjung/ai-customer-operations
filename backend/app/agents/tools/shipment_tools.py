@@ -8,11 +8,7 @@ def get_shipment(
     order_id: int,
 ) -> dict | None:
 
-    shipment = (
-        db.query(Shipment)
-        .filter(Shipment.order_id == order_id)
-        .first()
-    )
+    shipment = db.query(Shipment).filter(Shipment.order_id == order_id).first()
 
     if not shipment:
         return None

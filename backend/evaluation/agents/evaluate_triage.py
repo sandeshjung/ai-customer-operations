@@ -124,10 +124,18 @@ def evaluate_triage_agent():
     total = completed or 1
 
     print(f"\nCompleted: {completed}/{len(scenarios)} (failed: {len(failed)})")
-    print(f"Intent Accuracy:    {correct_intent}/{completed} = {correct_intent / total:.1%}")
-    print(f"Priority Accuracy:  {correct_priority}/{completed} = {correct_priority / total:.1%}")
-    print(f"Sentiment Accuracy: {correct_sentiment}/{completed} = {correct_sentiment / total:.1%}")
-    print(f"Action Accuracy:    {correct_action}/{completed} = {correct_action / total:.1%}")
+    print(
+        f"Intent Accuracy:    {correct_intent}/{completed} = {correct_intent / total:.1%}"
+    )
+    print(
+        f"Priority Accuracy:  {correct_priority}/{completed} = {correct_priority / total:.1%}"
+    )
+    print(
+        f"Sentiment Accuracy: {correct_sentiment}/{completed} = {correct_sentiment / total:.1%}"
+    )
+    print(
+        f"Action Accuracy:    {correct_action}/{completed} = {correct_action / total:.1%}"
+    )
 
     return {
         "total_scenarios": len(scenarios),

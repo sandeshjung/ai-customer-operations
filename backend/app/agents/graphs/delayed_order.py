@@ -1,12 +1,8 @@
-import json 
+import json
 import logging
 import re
 import time
-from langchain_core.messages import (
-    HumanMessage, 
-    SystemMessage,
-    ToolMessage
-)
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
@@ -23,19 +19,17 @@ from langchain_groq import ChatGroq
 from langchain_core.tools import tool
 
 from app.core.logging import configure_logging
+
 configure_logging()
 
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ITERATIONS = 5
 
-llm = ChatGroq(
-    model=settings.LLM_MODEL,
-    api_key=settings.LLM_API_KEY,
-    temperature=0
-)
+llm = ChatGroq(model=settings.LLM_MODEL, api_key=settings.LLM_API_KEY, temperature=0)
 
-@tool 
+
+@tool
 def get_order(order_id: int) -> str:
     """Get order information by order ID."""
 
@@ -47,7 +41,9 @@ def get_order(order_id: int) -> str:
     from app.core.database import SessionLocal
     from app.agents.tools.order_tools import get_order as db_get_order
 
-    with traced("tool.get_order", tracer_name="delayed_order_agent", order_id=order_id) as span:
+    with traced(
+        "tool.get_order", tracer_name="delayed_order_agent", order_id=order_id
+    ) as span:
         db = SessionLocal()
         try:
             result = db_get_order(db, order_id)
@@ -65,11 +61,13 @@ def get_shipment(order_id: int) -> str:
         "Calling get_shipment tool",
         extra={"order_id": order_id},
     )
-    
+
     from app.core.database import SessionLocal
     from app.agents.tools.shipment_tools import get_shipment as db_get_shipment
 
-    with traced("tool.get_shipment", tracer_name="delayed_order_agent", order_id=order_id) as span:
+    with traced(
+        "tool.get_shipment", tracer_name="delayed_order_agent", order_id=order_id
+    ) as span:
         db = SessionLocal()
         try:
             result = db_get_shipment(db, order_id)
@@ -91,7 +89,9 @@ def get_customer(customer_id: int) -> str:
     from app.core.database import SessionLocal
     from app.agents.tools.customer_tools import get_customer as db_get_customer
 
-    with traced("tool.get_customer", tracer_name="delayed_order_agent", customer_id=customer_id) as span:
+    with traced(
+        "tool.get_customer", tracer_name="delayed_order_agent", customer_id=customer_id
+    ) as span:
         db = SessionLocal()
         try:
             result = db_get_customer(db, customer_id)
@@ -104,17 +104,17 @@ def get_customer(customer_id: int) -> str:
 @tool
 def search_shipping_policy(query: str) -> str:
     """Search company policies and support documentation."""
-    with traced("tool.search_shipping_policy", tracer_name="delayed_order_agent", query=query[:200]) as span:
+    with traced(
+        "tool.search_shipping_policy",
+        tracer_name="delayed_order_agent",
+        query=query[:200],
+    ) as span:
         results = retrieve_policy(query=query, limit=5)
         span.set_attribute("result_count", len(results))
         return json.dumps(results, ensure_ascii=False)
 
-tools = [
-    get_order,
-    get_shipment,
-    get_customer,
-    search_shipping_policy
-]
+
+tools = [get_order, get_shipment, get_customer, search_shipping_policy]
 
 llms_with_tools = llm.bind_tools(tools)
 
@@ -160,9 +160,8 @@ before making the decision.
 Never invent policy rules.
 """
 
-def agent_node(
-    state: DelayedOrderState
-):
+
+def agent_node(state: DelayedOrderState):
     messages = state["messages"]
 
     logger.info(
@@ -180,10 +179,14 @@ def agent_node(
         tool_iteration=state["tool_iterations"],
         model=settings.LLM_MODEL,
     ) as span:
-        response = llms_with_tools.invoke([
-            SystemMessage(content=SYSTEM_PROMPT),   # ← tells LLM to investigate using tools
-            *state["messages"]
-        ])
+        response = llms_with_tools.invoke(
+            [
+                SystemMessage(
+                    content=SYSTEM_PROMPT
+                ),  # ← tells LLM to investigate using tools
+                *state["messages"],
+            ]
+        )
 
         tool_calls = getattr(response, "tool_calls", [])
         span.set_attribute("tool_calls_count", len(tool_calls))
@@ -195,9 +198,7 @@ def agent_node(
             span.set_attribute("llm.output_tokens", usage.get("output_tokens", 0))
             span.set_attribute("llm.total_tokens", usage.get("total_tokens", 0))
 
-    latency_ms = (
-        time.perf_counter() - start_time
-    ) * 1000
+    latency_ms = (time.perf_counter() - start_time) * 1000
 
     logger.info(
         "LLM completed | order_id=%s | latency_ms=%.2f | tool_calls=%s",
@@ -206,31 +207,24 @@ def agent_node(
         len(getattr(response, "tool_calls", [])),
     )
 
-    return {
-        "messages": [response]
-    }
+    return {"messages": [response]}
 
-def should_continue(
-    state: DelayedOrderState
-):
+
+def should_continue(state: DelayedOrderState):
     if state["tool_iterations"] >= MAX_TOOL_ITERATIONS:
         return "decision"
-    
+
     last_message = state["messages"][-1]
 
-    if getattr(
-        last_message,
-        "tool_calls",
-        None
-    ):
+    if getattr(last_message, "tool_calls", None):
         return "tools"
     return "decision"
 
+
 # tool_node = ToolNode(tools)
 
-def tool_node(
-        state: DelayedOrderState
-):
+
+def tool_node(state: DelayedOrderState):
     current_iterations = state["tool_iterations"]
 
     logger.info(
@@ -240,7 +234,6 @@ def tool_node(
     )
 
     if current_iterations >= MAX_TOOL_ITERATIONS:
-
         logger.warning(
             "Tool iteration limit reached | order_id=%s",
             state["order_id"],
@@ -251,11 +244,10 @@ def tool_node(
                 {
                     "role": "system",
                     "content": (
-                        "Maximum tool-call iterations reached."
-                        "Escalate to human review."
-                    )
+                        "Maximum tool-call iterations reached.Escalate to human review."
+                    ),
                 }
-            ]
+            ],
         }
     tool_calls = getattr(state["messages"][-1], "tool_calls", []) or []
     with traced(
@@ -274,10 +266,8 @@ def tool_node(
         current_iterations + 1,
     )
 
-    return {
-        **result,
-        "tool_iterations": current_iterations + 1
-    }
+    return {**result, "tool_iterations": current_iterations + 1}
+
 
 DECISION_PROMPT = """
 Based on the investigation above, produce the final operational decision.
@@ -308,9 +298,8 @@ Rules:
 - If no policy was retrieved, return an empty evidence list.
 """
 
-def decision_node(
-    state: DelayedOrderState
-):
+
+def decision_node(state: DelayedOrderState):
     logger.info(
         "Generating final decision | order_id=%s",
         state["order_id"],
@@ -377,7 +366,7 @@ def decision_node(
     try:
         decision_data = json.loads(content)
     except json.JSONDecodeError:
-        match = re.search(r'\{.*\}', content, re.DOTALL)
+        match = re.search(r"\{.*\}", content, re.DOTALL)
         if not match:
             raise ValueError(f"Invalid decision JSON: {content[:500]}")
         decision_data = json.loads(match.group())
@@ -400,54 +389,26 @@ def decision_node(
     return {
         "decision": decision,
         "requires_human": decision.requires_human,
-        "evidence": [
-            evidence.model_dump()
-            for evidence in decision.evidence
-        ],
+        "evidence": [evidence.model_dump() for evidence in decision.evidence],
     }
 
 
-graph_builder = StateGraph(
-    DelayedOrderState
-)
+graph_builder = StateGraph(DelayedOrderState)
 
-graph_builder.add_node(
-    "agent",
-    agent_node
-)
+graph_builder.add_node("agent", agent_node)
 
-graph_builder.add_node(
-    "tools",
-    tool_node
-)
+graph_builder.add_node("tools", tool_node)
 
-graph_builder.add_node(
-    "decision",
-    decision_node
-)
+graph_builder.add_node("decision", decision_node)
 
-graph_builder.add_edge(
-    START,
-    "agent"
-)
+graph_builder.add_edge(START, "agent")
 
 graph_builder.add_conditional_edges(
-    "agent",
-    should_continue,
-    {
-        "tools": "tools",
-        "decision": "decision"
-    }
+    "agent", should_continue, {"tools": "tools", "decision": "decision"}
 )
 
-graph_builder.add_edge(
-    "tools",
-    "agent"
-)
+graph_builder.add_edge("tools", "agent")
 
-graph_builder.add_edge(
-    "decision",
-    END
-)
+graph_builder.add_edge("decision", END)
 
 delayed_order_graph = graph_builder.compile()

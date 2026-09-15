@@ -1,9 +1,7 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-splitter = RecursiveCharacterTextSplitter(
-    chunk_size=700,
-    chunk_overlap=100
-)
+splitter = RecursiveCharacterTextSplitter(chunk_size=700, chunk_overlap=100)
+
 
 def chunk_documents(documents: list[dict]) -> list[dict]:
     chunks = []

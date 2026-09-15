@@ -1,10 +1,12 @@
 import sys
 import types
 
+
 def _install_rag_service_stub() -> None:
     fake_module = types.ModuleType("app.rag.service")
     fake_module.retrieve_policy = lambda query, limit=5: []
     sys.modules["app.rag.service"] = fake_module
+
 
 _install_rag_service_stub()
 
@@ -16,6 +18,7 @@ import pytest
 from app.models.customer import Customer
 from app.models.order import Order
 from app.workers import event_consumer
+
 
 def _make_customer_and_order(db_session) -> tuple[Customer, Order]:
     unique = uuid4().hex[:8]
@@ -31,6 +34,7 @@ def _make_customer_and_order(db_session) -> tuple[Customer, Order]:
 
     return customer, order
 
+
 def _order_delayed_event(order_id: int, delay_days: int = 10, **overrides) -> dict:
     event = {
         "event_id": "evt-1",
@@ -41,15 +45,17 @@ def _order_delayed_event(order_id: int, delay_days: int = 10, **overrides) -> di
     event.update(overrides)
     return event
 
+
 def _ticket_created_event(ticket_id: int, **overrides) -> dict:
     event = {
         "event_id": "evt-2",
         "event_type": "TICKET_CREATED",
         "data": {"ticket_id": ticket_id},
-        "trace_context": {}
+        "trace_context": {},
     }
     event.update(overrides)
     return event
+
 
 @pytest.fixture(autouse=True)
 def _patch_session_local(db_session):
@@ -58,6 +64,7 @@ def _patch_session_local(db_session):
     with patch.object(event_consumer, "SessionLocal", return_value=db_session):
         yield
 
+
 class TestOrderDelayedRequiresHuman:
     def test_creates_approval_and_skips_auto_execute(self, db_session):
         customer, order = _make_customer_and_order(db_session)
@@ -65,7 +72,9 @@ class TestOrderDelayedRequiresHuman:
         decision = MagicMock(requires_human=True)
 
         with (
-            patch.object(event_consumer, "investigate_delayed_order", return_value=decision) as mock_investigate,
+            patch.object(
+                event_consumer, "investigate_delayed_order", return_value=decision
+            ) as mock_investigate,
             patch.object(event_consumer, "create_approval") as mock_create_approval,
             patch.object(event_consumer, "execute_decision") as mock_execute,
         ):
@@ -92,7 +101,9 @@ class TestOrderDelayedAutoExecute:
         decision = MagicMock(requires_human=False)
 
         with (
-            patch.object(event_consumer, "investigate_delayed_order", return_value=decision),
+            patch.object(
+                event_consumer, "investigate_delayed_order", return_value=decision
+            ),
             patch.object(event_consumer, "create_approval") as mock_create_approval,
             patch.object(event_consumer, "execute_decision") as mock_execute,
         ):
@@ -113,7 +124,9 @@ class TestOrderDelayedMissingCustomer:
         nonexistent_order_id = 999999
 
         with (
-            patch.object(event_consumer, "investigate_delayed_order", return_value=decision),
+            patch.object(
+                event_consumer, "investigate_delayed_order", return_value=decision
+            ),
             patch.object(event_consumer, "create_approval") as mock_create_approval,
             patch.object(event_consumer, "execute_decision") as mock_execute,
         ):
@@ -128,7 +141,9 @@ class TestTicketCreated:
         with patch.object(event_consumer, "process_ticket") as mock_process_ticket:
             event_consumer.process_event(_ticket_created_event(ticket_id=77))
 
-        mock_process_ticket.assert_called_once_with(db=db_session, ticket_id=77, event_id="evt-2")
+        mock_process_ticket.assert_called_once_with(
+            db=db_session, ticket_id=77, event_id="evt-2"
+        )
 
 
 class TestSessionCleanup:
@@ -136,7 +151,11 @@ class TestSessionCleanup:
         customer, order = _make_customer_and_order(db_session)
 
         with (
-            patch.object(event_consumer, "investigate_delayed_order", side_effect=RuntimeError("boom")),
+            patch.object(
+                event_consumer,
+                "investigate_delayed_order",
+                side_effect=RuntimeError("boom"),
+            ),
             patch.object(db_session, "close", wraps=db_session.close) as mock_close,
         ):
             with pytest.raises(RuntimeError, match="boom"):
@@ -149,7 +168,9 @@ class TestSessionCleanup:
         decision = MagicMock(requires_human=False)
 
         with (
-            patch.object(event_consumer, "investigate_delayed_order", return_value=decision),
+            patch.object(
+                event_consumer, "investigate_delayed_order", return_value=decision
+            ),
             patch.object(event_consumer, "execute_decision"),
             patch.object(db_session, "close", wraps=db_session.close) as mock_close,
         ):

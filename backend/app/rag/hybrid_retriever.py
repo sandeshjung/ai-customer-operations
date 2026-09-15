@@ -11,6 +11,7 @@ _documents = load_documents()
 _chunks = chunk_documents(_documents)
 bm25 = BM25Retriever(_chunks)
 
+
 def _normalize_bm25_result(chunk: dict) -> dict:
     return {
         "content": chunk["text"],
@@ -18,8 +19,9 @@ def _normalize_bm25_result(chunk: dict) -> dict:
         "page": chunk.get("page"),
         "chunk_index": chunk.get("chunk_index"),
         "version": "1.0",
-        "score": None
+        "score": None,
     }
+
 
 def _compute_rrf_scores(vector_results: list[dict], bm25_results: list[dict]) -> dict:
     """
@@ -42,10 +44,11 @@ def _compute_rrf_scores(vector_results: list[dict], bm25_results: list[dict]) ->
 
     return scores
 
+
 def hybrid_search(query: str, limit: int = 5) -> list[dict]:
     # retrieve from both sources
-    vector_results = vector_search(query, limit=limit*2)
-    bm25_raw = bm25.search(query, limit=limit*2)
+    vector_results = vector_search(query, limit=limit * 2)
+    bm25_raw = bm25.search(query, limit=limit * 2)
     bm25_results = [_normalize_bm25_result(c) for c in bm25_raw]
 
     rrf_scores = _compute_rrf_scores(vector_results, bm25_results)
@@ -57,9 +60,7 @@ def hybrid_search(query: str, limit: int = 5) -> list[dict]:
             all_results[key] = result
 
     ranked = sorted(
-        all_results.items(),
-        key=lambda item: rrf_scores.get(item[0], 0),
-        reverse=True
+        all_results.items(), key=lambda item: rrf_scores.get(item[0], 0), reverse=True
     )
 
     output = []

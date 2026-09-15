@@ -6,11 +6,15 @@ from app.core.database import get_db
 from app.core.security import require_api_key
 from app.services.approval_service import approve, get_pending_approvals, reject
 
-router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(require_api_key)])
+router = APIRouter(
+    prefix="/admin", tags=["Admin"], dependencies=[Depends(require_api_key)]
+)
+
 
 class ApprovalReview(BaseModel):
     reviewer: str
     notes: str | None = None
+
 
 @router.get("/approvals/pending")
 def list_pending_approvals(db: Session = Depends(get_db)):
@@ -23,30 +27,33 @@ def list_pending_approvals(db: Session = Depends(get_db)):
             "customer_id": approval.customer_id,
             "agent_name": approval.agent_name,
             "decision": approval.decision,
-            "created_at": approval.created_at
+            "created_at": approval.created_at,
         }
         for approval in approvals
     ]
 
+
 @router.post("/approvals/{approval_id}/approve")
-def approve_approval(approval_id: int, review: ApprovalReview, db: Session = Depends(get_db)):
+def approve_approval(
+    approval_id: int, review: ApprovalReview, db: Session = Depends(get_db)
+):
     try:
         approval, result = approve(db, approval_id, review.reviewer, review.notes)
         return {
             "status": "approved",
             "approval_id": approval.id,
-            "ticket_id": result.get("ticket_id")
+            "ticket_id": result.get("ticket_id"),
         }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
+
 @router.post("/approvals/{approval_id}/reject")
-def reject_approval(approval_id: int, review: ApprovalReview, db: Session = Depends(get_db)):
+def reject_approval(
+    approval_id: int, review: ApprovalReview, db: Session = Depends(get_db)
+):
     try:
         approval = reject(db, approval_id, review.reviewer, review.notes)
-        return {
-            "status": "rejected",
-            "approval_id": approval.id
-        }
+        return {"status": "rejected", "approval_id": approval.id}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

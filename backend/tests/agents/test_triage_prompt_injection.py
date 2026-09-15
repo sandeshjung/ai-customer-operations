@@ -43,7 +43,12 @@ class TestPromptDelimiting:
         }
 
         triage_agent.triage_node(
-            {"ticket_id": 1, "ticket": ticket, "customer_history": [], "policy_context": ""}
+            {
+                "ticket_id": 1,
+                "ticket": ticket,
+                "customer_history": [],
+                "policy_context": "",
+            }
         )
 
         assert fake_llm.captured_messages is not None
@@ -75,7 +80,12 @@ class TestPromptDelimiting:
         ticket = {"subject": "Help", "message": injection_attempt, "priority": "MEDIUM"}
 
         triage_agent.triage_node(
-            {"ticket_id": 1, "ticket": ticket, "customer_history": [], "policy_context": ""}
+            {
+                "ticket_id": 1,
+                "ticket": ticket,
+                "customer_history": [],
+                "policy_context": "",
+            }
         )
 
         prompt_text = "\n".join(m.content for m in fake_llm.captured_messages)

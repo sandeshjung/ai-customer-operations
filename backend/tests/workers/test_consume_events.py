@@ -38,7 +38,9 @@ class _StopLoop(Exception):
 
 def _redis_batch(event: dict, message_id: str = "1-0"):
     """Shape xreadgroup's return value the way redis-py actually returns it."""
-    return [("customer_operations_events", [(message_id, {"event": json.dumps(event)})])]
+    return [
+        ("customer_operations_events", [(message_id, {"event": json.dumps(event)})])
+    ]
 
 
 def _order_delayed_event(event_id: str = "evt-1") -> dict:
@@ -66,9 +68,15 @@ class TestProcessesNewEvent:
         event = _order_delayed_event()
 
         with (
-            patch.object(event_consumer.redis_client, "xreadgroup", side_effect=[_redis_batch(event), _StopLoop()]),
+            patch.object(
+                event_consumer.redis_client,
+                "xreadgroup",
+                side_effect=[_redis_batch(event), _StopLoop()],
+            ),
             patch.object(event_consumer.redis_client, "xack") as mock_xack,
-            patch.object(event_consumer, "try_claim_event", return_value=True) as mock_claim,
+            patch.object(
+                event_consumer, "try_claim_event", return_value=True
+            ) as mock_claim,
             patch.object(event_consumer, "release_event_claim") as mock_release,
             patch.object(event_consumer, "process_event") as mock_process,
             patch.object(event_consumer, "send_to_dead_letter") as mock_dlq,
@@ -96,7 +104,11 @@ class TestSkipsAlreadyClaimed:
         event = _order_delayed_event()
 
         with (
-            patch.object(event_consumer.redis_client, "xreadgroup", side_effect=[_redis_batch(event), _StopLoop()]),
+            patch.object(
+                event_consumer.redis_client,
+                "xreadgroup",
+                side_effect=[_redis_batch(event), _StopLoop()],
+            ),
             patch.object(event_consumer.redis_client, "xack") as mock_xack,
             patch.object(event_consumer, "try_claim_event", return_value=False),
             patch.object(event_consumer, "process_event") as mock_process,
@@ -116,11 +128,17 @@ class TestRetryAndDeadLetter:
         event = _order_delayed_event()
 
         with (
-            patch.object(event_consumer.redis_client, "xreadgroup", side_effect=[_redis_batch(event), _StopLoop()]),
+            patch.object(
+                event_consumer.redis_client,
+                "xreadgroup",
+                side_effect=[_redis_batch(event), _StopLoop()],
+            ),
             patch.object(event_consumer.redis_client, "xack") as mock_xack,
             patch.object(event_consumer, "try_claim_event", return_value=True),
             patch.object(event_consumer, "release_event_claim") as mock_release,
-            patch.object(event_consumer, "process_event", side_effect=RuntimeError("boom")) as mock_process,
+            patch.object(
+                event_consumer, "process_event", side_effect=RuntimeError("boom")
+            ) as mock_process,
             patch.object(event_consumer, "send_to_dead_letter") as mock_dlq,
         ):
             with pytest.raises(_StopLoop):
@@ -144,12 +162,18 @@ class TestRetryAndDeadLetter:
         event = _order_delayed_event()
 
         with (
-            patch.object(event_consumer.redis_client, "xreadgroup", side_effect=[_redis_batch(event), _StopLoop()]),
+            patch.object(
+                event_consumer.redis_client,
+                "xreadgroup",
+                side_effect=[_redis_batch(event), _StopLoop()],
+            ),
             patch.object(event_consumer.redis_client, "xack") as mock_xack,
             patch.object(event_consumer, "try_claim_event", return_value=True),
             patch.object(event_consumer, "release_event_claim") as mock_release,
             patch.object(
-                event_consumer, "process_event", side_effect=[RuntimeError("transient"), None]
+                event_consumer,
+                "process_event",
+                side_effect=[RuntimeError("transient"), None],
             ) as mock_process,
             patch.object(event_consumer, "send_to_dead_letter") as mock_dlq,
         ):
@@ -182,7 +206,11 @@ class TestSleepBehavior:
         event = _order_delayed_event()
 
         with (
-            patch.object(event_consumer.redis_client, "xreadgroup", side_effect=[_redis_batch(event), _StopLoop()]),
+            patch.object(
+                event_consumer.redis_client,
+                "xreadgroup",
+                side_effect=[_redis_batch(event), _StopLoop()],
+            ),
             patch.object(event_consumer.redis_client, "xack"),
             patch.object(event_consumer, "try_claim_event", return_value=True),
             patch.object(event_consumer, "process_event"),

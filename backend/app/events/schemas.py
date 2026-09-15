@@ -3,6 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+
 class Event(BaseModel):
     event_id: str
     event_type: str

@@ -85,7 +85,9 @@ class TestApproveConcurrency:
                 # because it got scheduled a moment earlier.
                 start_barrier.wait(timeout=5)
                 try:
-                    approval_service.approve(db=db, approval_id=approval_id, reviewer=reviewer)
+                    approval_service.approve(
+                        db=db, approval_id=approval_id, reviewer=reviewer
+                    )
                     with outcomes_lock:
                         outcomes.append(("won", reviewer))
                 except ValueError as exc:
@@ -93,7 +95,9 @@ class TestApproveConcurrency:
                         outcomes.append(("lost", reviewer, str(exc)))
                 except Exception as exc:  # noqa: BLE001
                     with outcomes_lock:
-                        outcomes.append(("error", reviewer, f"{type(exc).__name__}: {exc}"))
+                        outcomes.append(
+                            ("error", reviewer, f"{type(exc).__name__}: {exc}")
+                        )
             finally:
                 db.close()
 
@@ -102,7 +106,9 @@ class TestApproveConcurrency:
             threading.Thread(target=_try_approve, args=("bob",)),
         ]
         with patch.object(
-            approval_service, "execute_decision", return_value={"actions": [], "ticket_id": 1}
+            approval_service,
+            "execute_decision",
+            return_value={"actions": [], "ticket_id": 1},
         ):
             for t in threads:
                 t.start()
@@ -114,8 +120,12 @@ class TestApproveConcurrency:
         wins = [o for o in outcomes if o[0] == "won"]
         losses = [o for o in outcomes if o[0] == "lost"]
 
-        assert len(wins) == 1, f"exactly one approval should win the race, got: {outcomes}"
-        assert len(losses) == 1, f"exactly one approval should lose the race, got: {outcomes}"
+        assert len(wins) == 1, (
+            f"exactly one approval should win the race, got: {outcomes}"
+        )
+        assert len(losses) == 1, (
+            f"exactly one approval should lose the race, got: {outcomes}"
+        )
         assert "already" in losses[0][2]
 
         # Final DB state should reflect exactly one reviewer, not a mix.
@@ -140,7 +150,9 @@ class TestApproveConcurrency:
             try:
                 start_barrier.wait(timeout=5)
                 try:
-                    approval_service.approve(db=db, approval_id=approval_id, reviewer="alice")
+                    approval_service.approve(
+                        db=db, approval_id=approval_id, reviewer="alice"
+                    )
                     with outcomes_lock:
                         outcomes.append("approve_won")
                 except ValueError:
@@ -157,7 +169,9 @@ class TestApproveConcurrency:
             try:
                 start_barrier.wait(timeout=5)
                 try:
-                    approval_service.reject(db=db, approval_id=approval_id, reviewer="bob")
+                    approval_service.reject(
+                        db=db, approval_id=approval_id, reviewer="bob"
+                    )
                     with outcomes_lock:
                         outcomes.append("reject_won")
                 except ValueError:
@@ -171,7 +185,9 @@ class TestApproveConcurrency:
 
         threads = [threading.Thread(target=_approve), threading.Thread(target=_reject)]
         with patch.object(
-            approval_service, "execute_decision", return_value={"actions": [], "ticket_id": 1}
+            approval_service,
+            "execute_decision",
+            return_value={"actions": [], "ticket_id": 1},
         ):
             for t in threads:
                 t.start()
@@ -180,12 +196,18 @@ class TestApproveConcurrency:
 
         assert len(outcomes) == 2
         wins = [o for o in outcomes if o.endswith("_won")]
-        assert len(wins) == 1, f"exactly one of approve/reject should win, got: {outcomes}"
+        assert len(wins) == 1, (
+            f"exactly one of approve/reject should win, got: {outcomes}"
+        )
 
         db = session_factory()
         final = db.get(HumanApproval, approval_id)
         # Whichever won, the final status must match it exactly - not
         # some inconsistent mix of the two.
-        expected_status = ApprovalStatus.APPROVED if wins[0] == "approve_won" else ApprovalStatus.REJECTED
+        expected_status = (
+            ApprovalStatus.APPROVED
+            if wins[0] == "approve_won"
+            else ApprovalStatus.REJECTED
+        )
         assert final.status == expected_status
         db.close()

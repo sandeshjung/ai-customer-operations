@@ -52,10 +52,19 @@ def main():
         "Recall@5": (retrieval_metrics.get("recall_at_5", 0), 0.60),
         "MRR": (retrieval_metrics.get("mrr", 0), 0.40),
         "Delay Severity Accuracy": (delay_metrics.get("severity_accuracy", 0), 0.70),
-        "Delay Resolution Accuracy": (delay_metrics.get("resolution_accuracy", 0), 0.70),
-        "Delay Escalation Accuracy": (delay_metrics.get("escalation_accuracy", 0), 0.70),
+        "Delay Resolution Accuracy": (
+            delay_metrics.get("resolution_accuracy", 0),
+            0.70,
+        ),
+        "Delay Escalation Accuracy": (
+            delay_metrics.get("escalation_accuracy", 0),
+            0.70,
+        ),
         "Triage Intent Accuracy": (triage_metrics.get("intent_accuracy", 0), 0.70),
-        "Triage Sentiment Accuracy": (triage_metrics.get("sentiment_accuracy", 0), 0.60),
+        "Triage Sentiment Accuracy": (
+            triage_metrics.get("sentiment_accuracy", 0),
+            0.60,
+        ),
     }
     if faithfulness_metrics:
         gates["RAG Faithfulness"] = (faithfulness_metrics.get("faithfulness", 0), 0.70)
@@ -66,7 +75,11 @@ def main():
         status = "PASS" if actual >= threshold else "FAIL"
         if status == "FAIL":
             all_passed = False
-        gate_results[name] = {"actual": actual, "threshold": threshold, "status": status}
+        gate_results[name] = {
+            "actual": actual,
+            "threshold": threshold,
+            "status": status,
+        }
         print(f"  {name}: {actual:.2%} (threshold: {threshold:.0%}) [{status}]")
 
     print(f"\n{'ALL GATES PASSED' if all_passed else 'SOME GATES FAILED'}")

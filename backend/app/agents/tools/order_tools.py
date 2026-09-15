@@ -2,16 +2,13 @@ from sqlalchemy.orm import Session
 
 from app.models.order import Order
 
+
 def get_order(
-        db: Session,
-        order_id: int,
+    db: Session,
+    order_id: int,
 ) -> dict | None:
 
-    order = (
-        db.query(Order)
-        .filter(Order.id == order_id)
-        .first()
-    )
+    order = db.query(Order).filter(Order.id == order_id).first()
 
     if not order:
         return None
@@ -21,8 +18,6 @@ def get_order(
         "customer_id": order.customer_id,
         "status": order.status,
         "expected_salary": (
-            order.expected_delivery.isoformat()
-            if order.expected_delivery
-            else None
-        )
+            order.expected_delivery.isoformat() if order.expected_delivery else None
+        ),
     }

@@ -95,7 +95,9 @@ def apply_eval_limit(scenarios: list[dict]) -> list[dict]:
     if EVAL_LIMIT:
         limit = int(EVAL_LIMIT)
         if limit < len(scenarios):
-            print(f"EVAL_LIMIT={limit} set — running {limit}/{len(scenarios)} scenarios")
+            print(
+                f"EVAL_LIMIT={limit} set — running {limit}/{len(scenarios)} scenarios"
+            )
         return scenarios[:limit]
     return scenarios
 

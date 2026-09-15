@@ -9,12 +9,8 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-def investigate_delayed_order(
-        db,
-        order_id: int,
-        delay_days: int,
-        event_id: str
-):
+
+def investigate_delayed_order(db, order_id: int, delay_days: int, event_id: str):
     execution_id = str(uuid.uuid4())
     logger.info(
         "Starting delayed order investigation",
@@ -42,7 +38,7 @@ def investigate_delayed_order(
                             f"Investigate delayed order "
                             f"{order_id}. "
                             f"It is {delay_days} days late."
-                        )
+                        ),
                     }
                 ],
                 "order_id": order_id,
@@ -52,13 +48,11 @@ def investigate_delayed_order(
                 "delay_days": delay_days,
                 "decision": None,
                 "requires_human": False,
-                "tool_iterations": 0
+                "tool_iterations": 0,
             }
         )
 
-        decision = validate_decision(
-            result["decision"]
-        )
+        decision = validate_decision(result["decision"])
 
         span.set_attribute("severity", decision.severity)
         span.set_attribute("resolution", decision.resolution)
@@ -79,11 +73,8 @@ def investigate_delayed_order(
     execution = AgentExecution(
         agent_name="delayed_order_agent",
         event_id=event_id,
-        input_data={
-            "order_id": order_id,
-            "delay_days": delay_days
-        },
-        decision=decision.model_dump()
+        input_data={"order_id": order_id, "delay_days": delay_days},
+        decision=decision.model_dump(),
     )
 
     db.add(execution)

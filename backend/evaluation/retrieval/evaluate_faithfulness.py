@@ -94,7 +94,9 @@ def evaluate_faithfulness():
 
         print(f"Question: {item['question']}")
         print(f"  Answer: {result.get('answer', '')[:150]}")
-        print(f"  Faithfulness: {score:.2f} — {result.get('faithfulness_reasoning', '')}")
+        print(
+            f"  Faithfulness: {score:.2f} — {result.get('faithfulness_reasoning', '')}"
+        )
         print("-" * 60)
         paced_sleep()
 
