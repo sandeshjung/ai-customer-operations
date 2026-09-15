@@ -68,6 +68,8 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
       - "8000:8000"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
     depends_on:
       postgres:
         condition: service_healthy
@@ -94,6 +96,8 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
       - "8001:8001" # health check — curl http://localhost:8001/health to inspect manually
+    volumes:
+      - hf_cache:/root/.cache/huggingface
     depends_on:
       postgres:
         condition: service_healthy
@@ -104,11 +108,17 @@ services:
       api:
         condition: service_started
     healthcheck:
+      # start_period is generous because a cold start pays for a real,
+      # network-dependent HuggingFace embedding model load (see
+      # start_worker.sh and CLAUDE.md's RAG-import gotcha) before the
+      # health server can even come up — too short a window here means
+      # autoheal kills the container mid-startup, forever restarting it
+      # before it ever gets a chance to process an event.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 60s
+      start_period: 300s
     command: ["sh", "backend/scripts/start_worker.sh"]
 
   autoheal:
@@ -124,3 +134,4 @@ volumes:
   postgres_data:
   redis_data:
   qdrant_data:
+  hf_cache:

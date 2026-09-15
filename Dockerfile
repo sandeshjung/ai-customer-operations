@@ -14,6 +14,10 @@ RUN uv sync --frozen --no-dev
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/app/backend"
+# stdout isn't a TTY in a container, so Python block-buffers it by default —
+# print() calls (event_consumer.py's progress lines) can sit unflushed
+# indefinitely, making a perfectly healthy worker look stuck in `docker logs`.
+ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
