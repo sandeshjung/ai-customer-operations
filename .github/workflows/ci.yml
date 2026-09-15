@@ -65,22 +65,10 @@ jobs:
         run: uv sync
 
       - name: Lint
-        # continue-on-error: the codebase currently has ~126 pre-existing
-        # ruff findings (mostly in backend/, unrelated to any specific
-        # change) that predate this workflow. Failing CI on day one for
-        # issues nobody introduced just trains people to ignore red
-        # builds. This still runs and reports on every push — run
-        # `make lint` locally to see the same list, fix at your own
-        # pace, then remove `continue-on-error` to make this a real gate.
         run: uv run ruff check .
-        continue-on-error: true
 
       - name: Format check
-        # Same reasoning as Lint above — ~80 files currently don't match
-        # `ruff format`'s output. Visible here, not blocking yet. Run
-        # `make format` locally to fix, then remove `continue-on-error`.
         run: uv run ruff format --check .
-        continue-on-error: true
 
       - name: Run database migrations
         run: uv run alembic -c alembic.ini upgrade head
