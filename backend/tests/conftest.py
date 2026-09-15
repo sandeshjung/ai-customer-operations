@@ -1,3 +1,9 @@
+import os
+
+os.environ.setdefault("OTEL_ENABLED", "false")
+os.environ.setdefault("LLM_API_KEY", "test-key")
+os.environ.setdefault("GROQ_API_KEY", "test-key")
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

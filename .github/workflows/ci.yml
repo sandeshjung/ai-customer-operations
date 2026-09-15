@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: customer_operations
+          POSTGRES_USER: customer_admin
+          POSTGRES_PASSWORD: customer_admin
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U customer_admin -d customer_operations"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: customer_operations
+      POSTGRES_USER: customer_admin
+      POSTGRES_PASSWORD: customer_admin
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      # No real LLM/embedding calls happen in the test scope this
+      # workflow runs (see the "Run tests" step below) — placeholders
+      # are enough to satisfy client construction at import time.
+      LLM_API_KEY: test-key
+      GROQ_API_KEY: test-key
+      OTEL_ENABLED: "false"
+      ADMIN_API_KEY: ci-placeholder-key
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Lint
+        # continue-on-error: the codebase currently has ~126 pre-existing
+        # ruff findings (mostly in backend/, unrelated to any specific
+        # change) that predate this workflow. Failing CI on day one for
+        # issues nobody introduced just trains people to ignore red
+        # builds. This still runs and reports on every push — run
+        # `make lint` locally to see the same list, fix at your own
+        # pace, then remove `continue-on-error` to make this a real gate.
+        run: uv run ruff check .
+        continue-on-error: true
+
+      - name: Format check
+        # Same reasoning as Lint above — ~80 files currently don't match
+        # `ruff format`'s output. Visible here, not blocking yet. Run
+        # `make format` locally to fix, then remove `continue-on-error`.
+        run: uv run ruff format --check .
+        continue-on-error: true
+
+      - name: Run database migrations
+        run: uv run alembic -c alembic.ini upgrade head
+
+      - name: Run tests
+        run: >
+          uv run pytest backend/tests/
+          --ignore=backend/tests/agents/test_delayed_order.py
+          --ignore=backend/tests/agents/test_rag_integration.py
+          --ignore=backend/tests/rag/test_policy_search.py
+          --ignore=backend/tests/rag/test_retriever.py
+          -v
+        # The four ignored files need a real HuggingFace embedding model
+        # download AND a Qdrant collection pre-populated via
+        # scripts/ingest_knowledge.py — genuine integration tests, not
+        # unit tests. Deliberately excluded from the on-every-push gate
+        # to keep CI fast and reliable; run them locally (or add a
+        # separate, less frequent "integration" workflow with a Qdrant
+        # service + an ingest step) if you want that coverage in CI too.
+
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontent/admin/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontent/admin
+        run: npm ci
+
+      - name: Build
+        working-directory: frontent/admin
+        run: npm run build
