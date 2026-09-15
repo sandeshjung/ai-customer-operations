@@ -63,6 +63,7 @@ async function request(path, options = {}) {
 
 export const api = {
   pendingApprovals: () => request("/admin/approvals/pending"),
+  notifications: () => request("/admin/notifications"),
   reviewApproval: (id, action, notes = null) =>
     request(`/admin/approvals/${id}/${action}`, {
       method: "POST",

@@ -2,10 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, getApiBase, getApiKey, setApiBase, setApiKey } from "./api";
 import { useToast } from "./useToast";
 import { ApprovalsSection } from "./components/ApprovalsSelection";
+import { NotificationsSection } from "./components/NotificationsSection";
 import { OrdersSection } from "./components/OrdersSection";
 import { TicketsSection } from "./components/TicketsSection";
 
-const POLL_INTERVAL_MS = 20000;
+// Approvals/tickets/notifications are small, fast-changing lists — poll them
+// often so new activity shows up without a manual refresh. Delayed orders is
+// a much larger payload (thousands of rows) that only changes as wall-clock
+// dates cross a threshold, so it gets its own, slower interval.
+const LIVE_POLL_INTERVAL_MS = 4000;
+const ORDERS_POLL_INTERVAL_MS = 20000;
 
 // Generic "list endpoint" state: idle -> loading -> ready | error
 function useEndpointState() {
@@ -20,6 +26,7 @@ export default function App() {
   const [connState, setConnState] = useState("pending");
   const [orders, setOrders] = useEndpointState();
   const [tickets, setTickets] = useEndpointState();
+  const [notifications, setNotifications] = useEndpointState();
   const [ticketStatusFilter, setTicketStatusFilter] = useState("");
   const {toast, showToast } = useToast();
 
@@ -52,20 +59,42 @@ export default function App() {
     }
   }, [setTickets, ticketStatusFilter]);
 
-  const loadAll = useCallback(() => {
+  const loadNotifications = useCallback(async () => {
+    try {
+        const data = await api.notifications();
+        setNotifications({ status: "ready", data, error: "" });
+    } catch (err) {
+        setNotifications({ status: "error", data: [], error: err.message });
+    }
+  }, [setNotifications]);
+
+  const loadLive = useCallback(() => {
     setConnState("pending");
     loadApprovals();
-    loadOrders();
     loadTickets();
-  }, [loadApprovals, loadOrders, loadTickets]);
+    loadNotifications();
+  }, [loadApprovals, loadTickets, loadNotifications]);
 
-  const loadAllRef = useRef(loadAll);
-  loadAllRef.current = loadAll;
+  const loadAll = useCallback(() => {
+    loadLive();
+    loadOrders();
+  }, [loadLive, loadOrders]);
+
+  const loadLiveRef = useRef(loadLive);
+  loadLiveRef.current = loadLive;
   useEffect(() => {
-    loadAllRef.current();
-    const id = setInterval(() => loadAllRef.current(), POLL_INTERVAL_MS);
+    loadLiveRef.current();
+    const id = setInterval(() => loadLiveRef.current(), LIVE_POLL_INTERVAL_MS);
     return () => clearInterval(id);
   }, [ticketStatusFilter]);
+
+  const loadOrdersRef = useRef(loadOrders);
+  loadOrdersRef.current = loadOrders;
+  useEffect(() => {
+    loadOrdersRef.current();
+    const id = setInterval(() => loadOrdersRef.current(), ORDERS_POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
 
   async function handleReviewApproval(id, action) {
     try {
@@ -157,6 +186,12 @@ export default function App() {
         error={tickets.error}
         statusFilter={ticketStatusFilter}
         onStatusFilterChange={setTicketStatusFilter} />
+
+        <NotificationsSection
+                notifications={notifications.data}
+                status={notifications.status}
+                error={notifications.error}
+              />
 
       <div className={`toast ${toast.show ? "show" : ""} ${toast.kind}`}>{toast.message}</div>
 

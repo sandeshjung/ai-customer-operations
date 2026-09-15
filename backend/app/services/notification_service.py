@@ -1,3 +1,4 @@
+import httpx
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.customer import Customer
@@ -15,6 +16,44 @@ def _send_via_log(recipient: str, subject: str | None, content: str) -> None:
         "Notification (log backend - no real delivery)",
         extra={"recipient": recipient, "subject": subject, "content": content},
     )
+
+
+def _send_via_mailjet(recipient: str, subject: str | None, content: str) -> None:
+    """Real delivery via Mailjet's Send API v3.1. Requires MAILJET_API_KEY,
+    MAILJET_API_SECRET, and MAILJET_SENDER_EMAIL (see config.py / .env.example).
+    Not wired into the default flow — see the commented call site below."""
+    response = httpx.post(
+        "https://api.mailjet.com/v3.1/send",
+        auth=(settings.MAILJET_API_KEY, settings.MAILJET_API_SECRET),
+        json={
+            "Messages": [
+                {
+                    "From": {
+                        "Email": settings.MAILJET_SENDER_EMAIL,
+                        "Name": settings.MAILJET_SENDER_NAME,
+                    },
+                    "To": [{"Email": recipient}],
+                    "Subject": subject or "An update on your order",
+                    "TextPart": content,
+                }
+            ]
+        },
+        timeout=10,
+    )
+    response.raise_for_status()
+
+
+def _demo_send_via_mailjet(recipient: str, subject: str | None, content: str) -> None:
+    """Best-effort wrapper around _send_via_mailjet for the demo call site in
+    send_notification() — swallows and logs any failure (bad/missing
+    credentials, network error, etc.) so toggling the demo on never risks
+    the primary notification flow, unlike the real _BACKENDS entries above,
+    which report failure back to the caller by design."""
+    try:
+        _send_via_mailjet(recipient, subject, content)
+        logger.info("Mailjet demo send succeeded", extra={"recipient": recipient})
+    except Exception as exc:  # noqa: BLE001 - demo-only real send, must never affect the primary notification flow
+        logger.warning("Mailjet demo send failed", extra={"error": str(exc)})
 
 
 _BACKENDS = {"log": _send_via_log}
@@ -67,6 +106,13 @@ def send_notification(
         logger.warning("Notification delivery failed", extra={"error": str(exc)})
         status = NotificationStatus.FAILED
         error = str(exc)
+
+    # DEMO: uncomment the line below to also send a real email via Mailjet
+    # (needs MAILJET_API_KEY / MAILJET_API_SECRET / MAILJET_SENDER_EMAIL in
+    # .env). Runs independently of the backend above — never changes the
+    # recorded status below, so the admin console keeps showing every
+    # notification exactly as it does today either way.
+    # _demo_send_via_mailjet(recipient, subject, content)
 
     notification = Notification(
         customer_id=customer_id,

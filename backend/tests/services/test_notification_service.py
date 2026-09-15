@@ -1,6 +1,8 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
+import httpx
+import pytest
 from app.models.customer import Customer
 from app.models.notification import Notification, NotificationStatus
 from app.services import notification_service
@@ -106,3 +108,68 @@ class TestSendNotification:
         rows = db_session.query(Notification).filter_by(customer_id=customer.id).all()
         assert len(rows) == 2
         assert {r.content for r in rows} == {"first", "second"}
+
+
+class TestMailjetDemoBackend:
+    """Not wired into the default flow (see the commented call site in
+    send_notification()) — these test it directly since it's still real,
+    reachable code that should work correctly if/when someone uncomments it."""
+
+    def test_send_via_mailjet_posts_expected_payload(self):
+        mock_response = Mock(status_code=200)
+        mock_response.raise_for_status = Mock()
+
+        with (
+            patch.object(notification_service.settings, "MAILJET_API_KEY", "key"),
+            patch.object(notification_service.settings, "MAILJET_API_SECRET", "secret"),
+            patch.object(
+                notification_service.settings,
+                "MAILJET_SENDER_EMAIL",
+                "support@example.com",
+            ),
+            patch.object(
+                notification_service.httpx, "post", return_value=mock_response
+            ) as mock_post,
+        ):
+            notification_service._send_via_mailjet(
+                "customer@example.com", "Shipping update", "Your order shipped!"
+            )
+
+        mock_post.assert_called_once()
+        args, kwargs = mock_post.call_args
+        assert args[0] == "https://api.mailjet.com/v3.1/send"
+        assert kwargs["auth"] == ("key", "secret")
+        message = kwargs["json"]["Messages"][0]
+        assert message["From"]["Email"] == "support@example.com"
+        assert message["To"] == [{"Email": "customer@example.com"}]
+        assert message["Subject"] == "Shipping update"
+        assert message["TextPart"] == "Your order shipped!"
+        mock_response.raise_for_status.assert_called_once()
+
+    def test_send_via_mailjet_raises_on_error_response(self):
+        mock_response = Mock(status_code=401)
+        mock_response.raise_for_status = Mock(
+            side_effect=httpx.HTTPStatusError(
+                "Unauthorized", request=None, response=mock_response
+            )
+        )
+
+        with (
+            patch.object(
+                notification_service.httpx, "post", return_value=mock_response
+            ),
+            pytest.raises(httpx.HTTPStatusError),
+        ):
+            notification_service._send_via_mailjet(
+                "customer@example.com", "Subject", "Body"
+            )
+
+    def test_demo_send_via_mailjet_swallows_failures(self):
+        with patch.object(
+            notification_service,
+            "_send_via_mailjet",
+            side_effect=RuntimeError("bad credentials"),
+        ):
+            notification_service._demo_send_via_mailjet(
+                "customer@example.com", "Subject", "Body"
+            )  # must not raise

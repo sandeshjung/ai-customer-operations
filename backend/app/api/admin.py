@@ -1,6 +1,7 @@
 from app.core.database import get_db
 from app.core.security import require_api_key
 from app.models.customer import Customer
+from app.models.notification import Notification
 from app.services.approval_service import approve, get_pending_approvals, reject
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -38,6 +39,32 @@ def list_pending_approvals(db: Session = Depends(get_db)):
             "created_at": approval.created_at,
         }
         for approval in approvals
+    ]
+
+
+@router.get("/notifications")
+def list_notifications(limit: int = 50, db: Session = Depends(get_db)):
+    notifications = (
+        db.query(Notification)
+        .order_by(Notification.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        {
+            "id": notification.id,
+            "customer_id": notification.customer_id,
+            "order_id": notification.order_id,
+            "channel": notification.channel,
+            "recipient": notification.recipient,
+            "subject": notification.subject,
+            "content": notification.content,
+            "status": notification.status,
+            "error": notification.error,
+            "created_at": notification.created_at,
+        }
+        for notification in notifications
     ]
 
 

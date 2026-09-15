@@ -410,10 +410,16 @@ button:disabled {
   border-color: color-mix(in srgb, var(--teal) 40%, transparent);
 }
 .badge.status-RESOLVED,
-.badge.status-CLOSED {
+.badge.status-CLOSED,
+.badge.status-SENT {
   color: var(--text-muted);
   background: color-mix(in srgb, var(--text-muted) 10%, transparent);
   border-color: transparent;
+}
+.badge.status-FAILED {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  border-color: color-mix(in srgb, var(--red) 38%, transparent);
 }
 
 /* Tables ---------------------------------------------------------------- */
@@ -444,6 +450,13 @@ tbody td {
 }
 tbody tr:hover td {
   background: var(--surface-raised);
+}
+tr.row-clickable {
+  cursor: pointer;
+}
+tr.row-clickable:focus-visible {
+  outline: 1px solid var(--teal);
+  outline-offset: -1px;
 }
 tbody tr:last-child td {
   border-bottom: none;
@@ -627,4 +640,109 @@ td.subject {
 
 .dot.unauthorized {
   background: var(--amber);
+}
+
+/* Modal ------------------------------------------------------------------ */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 8, 11, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 100;
+}
+
+.modal-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 100%;
+  max-width: 640px;
+  max-height: min(720px, 85vh);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.modal-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.modal-close:hover {
+  color: var(--text);
+  background: var(--surface-raised);
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+}
+
+/* Email preview inside the notification detail modal */
+
+.email-preview-meta {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  row-gap: 8px;
+  column-gap: 12px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.email-preview-meta dt {
+  color: var(--text-faint);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding-top: 2px;
+}
+
+.email-preview-meta dd {
+  margin: 0;
+}
+
+.email-preview-body {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 18px;
+  white-space: pre-wrap;
+  line-height: 1.65;
+  font-size: 13.5px;
+  color: var(--text);
+}
+
+.email-preview-error {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 38%, transparent);
+  color: var(--red);
+  font-size: 12.5px;
 }

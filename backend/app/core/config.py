@@ -40,6 +40,13 @@ class Settings(BaseSettings):
 
     NOTIFICATION_BACKEND: str = "log"
 
+    # Only needed if you uncomment the Mailjet demo call in
+    # notification_service.send_notification() — see that file.
+    MAILJET_API_KEY: str | None = None
+    MAILJET_API_SECRET: str | None = None
+    MAILJET_SENDER_EMAIL: str | None = None
+    MAILJET_SENDER_NAME: str = "Customer Support"
+
     ADMIN_API_KEY: str | None = None
 
     RATE_LIMIT_ENABLED: bool = True
