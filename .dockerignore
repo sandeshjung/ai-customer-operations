@@ -13,7 +13,7 @@ __pycache__/
 htmlcov/
 
 # Node / frontend — not part of this image, has its own build
-frontent/
+frontend/
 **/node_modules/
 **/dist/
 

@@ -99,12 +99,12 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: frontent/admin/package-lock.json
+          cache-dependency-path: frontend/admin/package-lock.json
 
       - name: Install dependencies
-        working-directory: frontent/admin
+        working-directory: frontend/admin
         run: npm ci
 
       - name: Build
-        working-directory: frontent/admin
+        working-directory: frontend/admin
         run: npm run build

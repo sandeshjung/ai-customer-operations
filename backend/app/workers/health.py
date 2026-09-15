@@ -12,7 +12,7 @@ HEARTBEAT_KEY = "worker:heartbeat"
 
 def record_heartbeat() -> None:
     try:
-        redis_client.set(HEARTBEAT_KEY, str(time.time()), ex=settings.WORKER_HEALTHBEAT_TTL_SECONDS)
+        redis_client.set(HEARTBEAT_KEY, str(time.time()), ex=settings.WORKER_HEARTBEAT_TTL_SECONDS)
     except Exception as exc:
         logger.warning("Failed to record worker heartbeat", extra={"error": str(exc)})
 

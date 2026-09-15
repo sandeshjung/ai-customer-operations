@@ -12,9 +12,6 @@ Core flow: `ORDER_DELAYED` event → Delayed Order Agent investigates (tool call
 
 Python 3.12+, FastAPI, PostgreSQL, Redis (event bus + rate limiting + idempotency), Qdrant (vector store), LangGraph (both agents), Groq (LLM provider), OpenTelemetry + Jaeger (tracing), React + Vite (admin console), uv (dependency management), Alembic (migrations), pytest.
 
-## ⚠️ The frontend folder is misspelled: `frontent/`, not `frontend/`
-
-This typo is baked into the directory name (`frontent/admin/`) and has been left as-is rather than renamed, since renaming risks breaking anything else that references the path and wasn't worth the churn. Don't "fix" it without checking — just use the existing name.
 
 ## Directory structure
 
@@ -44,7 +41,7 @@ backend/
   evaluation/              # agent accuracy eval harness, scaled for Groq free-tier limits
   scripts/                 # seed_database.py, run_worker.py, ingest_knowledge.py
   tests/
-frontent/admin/            # React admin console (note the typo — see above)
+frontend/admin/            # React admin console (note the typo — see above)
 data/knowledge/             # policy PDFs, embedded into Qdrant
 docs/                        # plain-text source of the same policy docs (used for chunking/ingestion)
 docker-compose.yml            # Postgres, Redis, Qdrant, Jaeger (NOT the backend/worker — no Dockerfile yet)
@@ -67,7 +64,7 @@ uv run pytest backend/tests/services/test_approval_service_concurrency.py -v   #
 make evaluate-quick                             # agent eval, first 3 scenarios only (cheap smoke test)
 make evaluate                                    # full agent eval — costs real LLM calls, see below
 
-cd frontent/admin && npm install && npm run dev    # admin console, expects API at localhost:8000
+cd frontend/admin && npm install && npm run dev    # admin console, expects API at localhost:8000
 \```
 
 pytest's `pythonpath` is already set to `backend` in `pyproject.toml`, so you usually don't need `PYTHONPATH=backend` for test runs — only for one-off scripts run directly.
@@ -104,8 +101,6 @@ Trace context propagates across the async event boundary: when the delay agent's
 ## Known gaps (not fixed, don't assume they are)
 
 - No customer-facing frontend — only the admin console exists.
-- No Dockerfile for backend/worker, no CI/CD (no `.github/`).
-- No worker process supervision/restart policy.
 - Rate limiting is fixed-window (not sliding-window/token-bucket) — good enough to stop accidental abuse, not a determined attacker.
 - Prompt-injection mitigation on the triage agent (delimiting customer content, explicit system-prompt instruction) is real but unverified against an actual model — no automated test can confirm the LLM *obeys* the instruction without a paid API call. Treat it as a mitigation, not a guarantee.
 
@@ -113,3 +108,5 @@ Trace context propagates across the async event boundary: when the delay agent's
 ## Git
 Never run `git commit` or `git push` unless explicitly asked in the current
 message. Leave changes staged/unstaged for review.
+
+### Make sure to be concise with all of your responses.
