@@ -10,7 +10,7 @@ Core flow: `ORDER_DELAYED` event → Delayed Order Agent investigates (tool call
 
 ## Stack
 
-Python 3.12+, FastAPI, PostgreSQL, Redis (event bus + rate limiting + idempotency), Qdrant (vector store), LangGraph (both agents), Groq (LLM provider), OpenTelemetry + Jaeger (tracing), React + Vite (admin console), uv (dependency management), Alembic (migrations), pytest.
+Python 3.12+, FastAPI, PostgreSQL, Redis (event bus + rate limiting + idempotency), Qdrant (vector store), LangGraph (both agents), Groq (LLM provider), OpenTelemetry + Jaeger (tracing), React + Vite (admin console + customer portal), uv (dependency management), Alembic (migrations), pytest, Docker Compose.
 
 
 ## Directory structure
@@ -23,7 +23,7 @@ backend/
       tools/            # DB-backed tools the delayed-order agent calls
       models.py         # AgentDecision, TriageDecision (pydantic, not DB models)
       guardrails.py      # post-decision validation (e.g. CRITICAL severity forces requires_human)
-    api/                # FastAPI routers — one file per resource
+    api/                # FastAPI routers — one file per resource, incl. customer_portal.py
     core/
       config.py          # Settings (pydantic-settings, reads .env)
       security.py         # require_api_key, rate_limit dependencies
@@ -34,28 +34,37 @@ backend/
     rag/                  # hybrid (BM25 + vector) retrieval over policy docs
     schemas/              # pydantic request/response schemas for the API
     services/             # business logic — agent_service, triage_service, action_service,
-                           # approval_service, notification_service
+                           # approval_service, notification_service (see Mailjet note below)
     workers/
       event_consumer.py     # the Redis Streams polling loop — see gotchas below
+      health.py              # liveness HTTP server + Redis heartbeat, used by the worker's
+                              # Docker healthcheck and the autoheal container
   alembic/versions/       # migrations
   evaluation/              # agent accuracy eval harness, scaled for Groq free-tier limits
-  scripts/                 # seed_database.py, run_worker.py, ingest_knowledge.py
+  scripts/                 # seed_database.py, run_worker.py, ingest_knowledge.py, start_worker.sh
   tests/
-frontend/admin/            # React admin console (note the typo — see above)
+frontend/admin/            # React admin console (note the typo — see above) — approvals,
+                            # delayed orders, tickets, notifications, dark ops-console UI
+frontend/customer/          # React customer portal — guest order lookup (order ID + email,
+                            # not real auth), read-only, light UI deliberately distinct from admin
 data/knowledge/             # policy PDFs, embedded into Qdrant
 docs/                        # plain-text source of the same policy docs (used for chunking/ingestion)
-docker-compose.yml            # Postgres, Redis, Qdrant, Jaeger (NOT the backend/worker — no Dockerfile yet)
+Dockerfile                    # backend image, used by both the api and worker services below
+docker-compose.yml              # full stack: Postgres, Redis, Qdrant, Jaeger, api, worker,
+                                 # autoheal (restarts the worker if its healthcheck fails),
+                                 # admin-console, customer-portal
 \```
 
 ## Commands
 
 \```bash
 uv sync                                    # install deps
-docker compose up -d                        # start Postgres/Redis/Qdrant/Jaeger
-PYTHONPATH=backend uv run alembic upgrade head   # run migrations
+docker compose up -d                        # start the FULL stack: infra + api + worker + both frontends
+                                             # (see README.md for the from-scratch setup walkthrough)
+PYTHONPATH=backend uv run alembic upgrade head   # run migrations (only needed if not using docker compose's api service, which runs this itself)
 make seed                                     # seed synthetic data
-make dev                                       # start the API (uvicorn --reload)
-PYTHONPATH=backend uv run python backend/scripts/run_worker.py   # start the event worker (separate process)
+make dev                                       # start the API locally (uvicorn --reload) instead of in Docker
+PYTHONPATH=backend uv run python backend/scripts/run_worker.py   # start the event worker locally (separate process)
 
 make test                                      # full test suite
 uv run pytest backend/tests/services/            # just the service layer
@@ -64,8 +73,12 @@ uv run pytest backend/tests/services/test_approval_service_concurrency.py -v   #
 make evaluate-quick                             # agent eval, first 3 scenarios only (cheap smoke test)
 make evaluate                                    # full agent eval — costs real LLM calls, see below
 
-cd frontend/admin && npm install && npm run dev    # admin console, expects API at localhost:8000
+cd frontend/admin && npm install && npm run dev    # admin console dev server, expects API at localhost:8000
+cd frontend/customer && npm install && npm run dev  # customer portal dev server, same API
 \```
+
+Running `api`/`worker` via `docker compose` and via `make dev`/the local script at the same time will
+fight over the same port — pick one or the other, not both.
 
 pytest's `pythonpath` is already set to `backend` in `pyproject.toml`, so you usually don't need `PYTHONPATH=backend` for test runs — only for one-off scripts run directly.
 
@@ -81,9 +94,13 @@ pytest's `pythonpath` is already set to `backend` in `pyproject.toml`, so you us
 
 **5. Groq free-tier rate limits shape a lot of design choices here.** The evaluation harness (`backend/evaluation/`) has retry/backoff/checkpointing and an `EVAL_LIMIT` env var specifically because running the full eval suite can blow through free-tier quota. Don't casually scale up dataset sizes or remove the pacing without checking `backend/evaluation/README.md`.
 
-**6. No Dockerfile for the backend or worker yet.** `docker-compose.yml` only containerizes infra (Postgres, Redis, Qdrant, Jaeger). The API and worker run directly via `uv run`, not in containers.
+**6. `api`, `worker`, `admin-console`, and `customer-portal` all run as Docker containers, and Docker images are snapshots — they do NOT hot-reload source changes.** Editing a `.py` or frontend file and expecting the running container to pick it up will silently fail: you have to `docker compose up -d --build <service>` to rebuild. This bit us repeatedly in practice — e.g. toggling the Mailjet demo line in `notification_service.py` (see gotcha below) had zero effect until the container was rebuilt, and it's easy to end up with `api` and `worker` running two different versions of the same file if you rebuild one and not the other. When in doubt, `docker exec <container> grep <symbol> /app/backend/...` to check what code the container is actually running before debugging further.
 
-**7. Auth is a single shared secret, not per-user.** `ADMIN_API_KEY` gates all mutating endpoints and the whole `/admin/*` router, sent via `X-API-Key` header. There's no login/session system — don't assume `current_user`-style patterns exist anywhere. If `ADMIN_API_KEY` isn't set, protected endpoints fail closed with a 503 (not silently open).
+**7. Auth is a single shared secret, not per-user.** `ADMIN_API_KEY` gates all mutating endpoints and the whole `/admin/*` router, sent via `X-API-Key` header. There's no login/session system — don't assume `current_user`-style patterns exist anywhere. If `ADMIN_API_KEY` isn't set, protected endpoints fail closed with a 503 (not silently open). `.env.example` doesn't currently list it — don't assume its absence there means it's optional.
+
+**8. `notification_service.send_notification()` has a real Mailjet backend, deliberately left commented out.** `_send_via_mailjet()` / `_demo_send_via_mailjet()` exist and work (see `MAILJET_*` settings), but the call site in `send_notification()` is commented by default — uncommenting it sends a real email using whatever's in `.env`. Always double check which state a running container actually has (gotcha #6) before assuming it's off.
+
+**9. The worker's `start_worker.sh` checks Qdrant collection existence via a raw `QdrantClient`, not `app.rag.vector_store` — on purpose.** Importing `app.rag.vector_store` (or `app.rag.retriever`) loads a real HuggingFace embedding model at import time (gotcha #1). The pre-check used to import it just to answer a yes/no question, silently doubling every worker cold-start's cost. Don't reintroduce that import there.
 
 ## Testing conventions
 
@@ -100,9 +117,11 @@ Trace context propagates across the async event boundary: when the delay agent's
 
 ## Known gaps (not fixed, don't assume they are)
 
-- No customer-facing frontend — only the admin console exists.
+- `GET /tickets` and `GET /portal/orders/{id}` are intentionally public (no API key) — the customer portal needs them unauthenticated. The portal's order+email match is a guessing deterrent, not real security (see the comment in `customer_portal.py`).
 - Rate limiting is fixed-window (not sliding-window/token-bucket) — good enough to stop accidental abuse, not a determined attacker.
 - Prompt-injection mitigation on the triage agent (delimiting customer content, explicit system-prompt instruction) is real but unverified against an actual model — no automated test can confirm the LLM *obeys* the instruction without a paid API call. Treat it as a mitigation, not a guarantee.
+- Neither frontend has automated tests (no Vitest/RTL) — verification so far has been manual/Playwright, not committed as regression coverage.
+- CORS is permissive by default (`DEBUG=true` allows any localhost port). Set `DEBUG=false` and `CORS_ALLOWED_ORIGINS` (comma-separated) before any real deployment — see `main.py`.
 
 
 ## Git

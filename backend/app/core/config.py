@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     WORKER_HEALTH_PORT: int = 8001
     WORKER_HEARTBEAT_TTL_SECONDS: int = 60
 
+    # CORS. In DEBUG (the local dev default) any localhost/127.0.0.1 port is
+    # allowed, since Vite bumps ports whenever more than one dev server is
+    # already running. Outside DEBUG, only the explicit origins below are
+    # allowed — comma-separated, e.g. "https://app.example.com,https://admin.example.com".
+    CORS_ALLOWED_ORIGINS: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -72,6 +78,14 @@ class Settings(BaseSettings):
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}"
             f"/{self.POSTGRES_DB}"
         )
+
+    @property
+    def cors_allowed_origins(self) -> list[str]:
+        return [
+            origin.strip()
+            for origin in self.CORS_ALLOWED_ORIGINS.split(",")
+            if origin.strip()
+        ]
 
 
 @lru_cache

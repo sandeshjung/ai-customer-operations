@@ -112,7 +112,7 @@ def send_notification(
     # .env). Runs independently of the backend above — never changes the
     # recorded status below, so the admin console keeps showing every
     # notification exactly as it does today either way.
-    
+
     # _demo_send_via_mailjet(recipient, subject, content)
 
     notification = Notification(

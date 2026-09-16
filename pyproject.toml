@@ -3,6 +3,7 @@ name = "ai-customer-operations"
 version = "0.1.0"
 description = "AI-powered customer operations automation platform"
 readme = "README.md"
+license = "MIT"
 authors = [
     { name = "Sandesh Jung Kunwar", email = "sandeshjung@gmail.com" }
 ]

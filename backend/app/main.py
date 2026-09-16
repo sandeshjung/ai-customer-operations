@@ -23,17 +23,27 @@ app = FastAPI(
     debug=settings.DEBUG,
 )
 
-app.add_middleware(
-    CORSMiddleware,
+if settings.DEBUG:
     # Matches any localhost/127.0.0.1 port rather than hardcoding specific
     # ones — Vite bumps to the next free port (5174 -> 5175 -> ...) whenever
     # more than one dev server instance is already running, which otherwise
-    # means CORS breaks every time that happens.
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    # means CORS breaks every time that happens. Dev-only: never applies
+    # once DEBUG=false, so this can't leak into a real deployment.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_allowed_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 app.include_router(customers_router, prefix=settings.API_V1_PREFIX)
 app.include_router(orders_router, prefix=settings.API_V1_PREFIX)

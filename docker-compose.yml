@@ -130,6 +130,26 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
+  admin-console:
+    build:
+      context: ./frontend/admin
+    container_name: customer-operations-admin-console
+    restart: unless-stopped
+    ports:
+      - "8080:80" # http://localhost:8080 — set the API base/key in its header once loaded
+    depends_on:
+      - api
+
+  customer-portal:
+    build:
+      context: ./frontend/customer
+    container_name: customer-operations-customer-portal
+    restart: unless-stopped
+    ports:
+      - "8081:80" # http://localhost:8081
+    depends_on:
+      - api
+
 volumes:
   postgres_data:
   redis_data:
