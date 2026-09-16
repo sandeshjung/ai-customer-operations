@@ -112,6 +112,23 @@ def search_shipping_policy(query: str) -> str:
 
 tools = [get_order, get_shipment, get_customer, search_shipping_policy]
 
+
+def _usage_delta(state: DelayedOrderState, usage: dict | None) -> dict:
+    """Adds one LLM call's usage_metadata onto the state's running totals."""
+    delta = {"llm_call_count": state.get("llm_call_count", 0) + 1}
+    if usage:
+        delta["llm_input_tokens"] = state.get("llm_input_tokens", 0) + usage.get(
+            "input_tokens", 0
+        )
+        delta["llm_output_tokens"] = state.get("llm_output_tokens", 0) + usage.get(
+            "output_tokens", 0
+        )
+        delta["llm_total_tokens"] = state.get("llm_total_tokens", 0) + usage.get(
+            "total_tokens", 0
+        )
+    return delta
+
+
 llms_with_tools = llm.bind_tools(tools)
 
 SYSTEM_PROMPT = """
@@ -201,7 +218,7 @@ def agent_node(state: DelayedOrderState):
         len(getattr(response, "tool_calls", [])),
     )
 
-    return {"messages": [response]}
+    return {"messages": [response], **_usage_delta(state, usage)}
 
 
 def should_continue(state: DelayedOrderState):
@@ -384,6 +401,7 @@ def decision_node(state: DelayedOrderState):
         "decision": decision,
         "requires_human": decision.requires_human,
         "evidence": [evidence.model_dump() for evidence in decision.evidence],
+        **_usage_delta(state, usage),
     }
 
 

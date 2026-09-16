@@ -145,7 +145,13 @@ Return JSON:
         decision.trace_id,
     )
 
-    return {"decision": decision}
+    return {
+        "decision": decision,
+        "llm_input_tokens": usage.get("input_tokens", 0) if usage else 0,
+        "llm_output_tokens": usage.get("output_tokens", 0) if usage else 0,
+        "llm_total_tokens": usage.get("total_tokens", 0) if usage else 0,
+        "llm_call_count": 1,
+    }
 
 
 def build_triage_graph():

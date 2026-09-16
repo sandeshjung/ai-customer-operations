@@ -5,6 +5,7 @@ import { ApprovalsSection } from "./components/ApprovalsSelection";
 import { NotificationsSection } from "./components/NotificationsSection";
 import { OrdersSection } from "./components/OrdersSection";
 import { TicketsSection } from "./components/TicketsSection";
+import { UsageSection } from "./components/UsageSection";
 
 // Approvals/tickets/notifications are small, fast-changing lists — poll them
 // often so new activity shows up without a manual refresh. Delayed orders is
@@ -14,10 +15,12 @@ const LIVE_POLL_INTERVAL_MS = 4000;
 const ORDERS_POLL_INTERVAL_MS = 20000;
 
 // Generic "list endpoint" state: idle -> loading -> ready | error
-function useEndpointState() {
-  const [state, setState] = useState({ status: "loading", data: [], error: "" });
+function useEndpointState(emptyData = []) {
+  const [state, setState] = useState({ status: "loading", data: emptyData, error: "" });
   return [state, setState];
 }
+
+const EMPTY_USAGE = { summary: null, by_agent: [], recent: [] };
 
 export default function App() {
   const [approvals, setApprovals] = useEndpointState();
@@ -27,6 +30,7 @@ export default function App() {
   const [orders, setOrders] = useEndpointState();
   const [tickets, setTickets] = useEndpointState();
   const [notifications, setNotifications] = useEndpointState();
+  const [usage, setUsage] = useEndpointState(EMPTY_USAGE);
   const [ticketStatusFilter, setTicketStatusFilter] = useState("");
   const {toast, showToast } = useToast();
 
@@ -68,12 +72,22 @@ export default function App() {
     }
   }, [setNotifications]);
 
+  const loadUsage = useCallback(async () => {
+    try {
+        const data = await api.usage();
+        setUsage({ status: "ready", data, error: "" });
+    } catch (err) {
+        setUsage({ status: "error", data: EMPTY_USAGE, error: err.message });
+    }
+  }, [setUsage]);
+
   const loadLive = useCallback(() => {
     setConnState("pending");
     loadApprovals();
     loadTickets();
     loadNotifications();
-  }, [loadApprovals, loadTickets, loadNotifications]);
+    loadUsage();
+  }, [loadApprovals, loadTickets, loadNotifications, loadUsage]);
 
   const loadAll = useCallback(() => {
     loadLive();
@@ -191,6 +205,12 @@ export default function App() {
                 notifications={notifications.data}
                 status={notifications.status}
                 error={notifications.error}
+              />
+
+        <UsageSection
+                usage={usage.data}
+                status={usage.status}
+                error={usage.error}
               />
 
       <div className={`toast ${toast.show ? "show" : ""} ${toast.kind}`}>{toast.message}</div>

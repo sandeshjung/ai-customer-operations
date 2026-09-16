@@ -1,7 +1,9 @@
+import time
 import uuid
 
 from app.agents.graphs.delayed_order import delayed_order_graph
 from app.agents.guardrails import validate_decision
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.tracing import traced
 from app.models.agent_execution import AgentExecution
@@ -19,6 +21,8 @@ def investigate_delayed_order(db, order_id: int, delay_days: int, event_id: str)
             "event_id": event_id,
         },
     )
+
+    start_time = time.perf_counter()
 
     with traced(
         "delayed_order_agent.run",
@@ -48,6 +52,10 @@ def investigate_delayed_order(db, order_id: int, delay_days: int, event_id: str)
                 "decision": None,
                 "requires_human": False,
                 "tool_iterations": 0,
+                "llm_input_tokens": 0,
+                "llm_output_tokens": 0,
+                "llm_total_tokens": 0,
+                "llm_call_count": 0,
             }
         )
 
@@ -56,6 +64,8 @@ def investigate_delayed_order(db, order_id: int, delay_days: int, event_id: str)
         span.set_attribute("severity", decision.severity)
         span.set_attribute("resolution", decision.resolution)
         span.set_attribute("requires_human", decision.requires_human)
+
+    duration_ms = int((time.perf_counter() - start_time) * 1000)
 
     logger.info(
         "Delayed order investigation completed",
@@ -74,6 +84,12 @@ def investigate_delayed_order(db, order_id: int, delay_days: int, event_id: str)
         event_id=event_id,
         input_data={"order_id": order_id, "delay_days": delay_days},
         decision=decision.model_dump(),
+        model=settings.LLM_MODEL,
+        input_tokens=result.get("llm_input_tokens", 0),
+        output_tokens=result.get("llm_output_tokens", 0),
+        total_tokens=result.get("llm_total_tokens", 0),
+        llm_call_count=result.get("llm_call_count", 0),
+        duration_ms=duration_ms,
     )
 
     db.add(execution)

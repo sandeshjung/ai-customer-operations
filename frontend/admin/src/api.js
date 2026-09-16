@@ -73,4 +73,5 @@ export const api = {
   tickets: (status) => request("/tickets" + (status ? `?status=${status}` : "")),
   publishDelayedOrders: (limit) =>
     request(`/orders/monitor/delayed?limit=${limit}`, { method: "POST" }),
+  usage: () => request("/admin/usage"),
 };

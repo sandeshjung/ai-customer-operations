@@ -5,6 +5,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from app.agents.models import TicketPriority as DecisionPriority
+from app.models.agent_execution import AgentExecution
 from app.models.customer import Customer
 from app.models.support_ticket import SupportTicket, TicketPriority, TicketStatus
 from app.services import triage_service
@@ -63,7 +64,10 @@ def _fake_decision(**overrides):
         "trace_id": None,
     }
     fields.update(overrides)
-    return SimpleNamespace(**fields)
+    # process_ticket() now persists an AgentExecution audit row via
+    # decision.model_dump() (see the AI usage monitor) — the real
+    # TriageDecision is a pydantic model, so the stand-in needs the method too.
+    return SimpleNamespace(**fields, model_dump=lambda: dict(fields))
 
 
 class TestProcessTicket:
@@ -145,3 +149,36 @@ class TestProcessTicket:
             )
 
         assert result is None
+
+    def test_persists_agent_execution_with_token_usage(self, db_session):
+        """Regression test for the AI usage monitor: triage runs used to
+        never be recorded in agent_executions at all (only delayed-order
+        did), so usage/cost stats silently excluded every triage run."""
+        ticket = _make_ticket(db_session)
+        decision = _fake_decision()
+
+        with (
+            patch.dict(sys.modules, {"app.rag.service": _stub_rag_service()}),
+            patch.object(triage_service, "triage_graph") as mock_graph,
+        ):
+            mock_graph.invoke.return_value = {
+                "decision": decision,
+                "llm_input_tokens": 120,
+                "llm_output_tokens": 45,
+                "llm_total_tokens": 165,
+                "llm_call_count": 1,
+            }
+            triage_service.process_ticket(
+                db=db_session, ticket_id=ticket.id, event_id="evt-1"
+            )
+
+        execution = (
+            db_session.query(AgentExecution)
+            .filter_by(agent_name="triage_agent", event_id="evt-1")
+            .one()
+        )
+        assert execution.input_tokens == 120
+        assert execution.output_tokens == 45
+        assert execution.total_tokens == 165
+        assert execution.llm_call_count == 1
+        assert execution.duration_ms is not None

@@ -260,6 +260,40 @@ select.filter {
   color: var(--red);
 }
 
+/* Stat tiles (AI usage summary) --------------------------------------- */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.stat-tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.stat-value {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.stat-label {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.stat-hint {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--amber);
+}
+
 /* Approval cards ------------------------------------------------------ */
 
 .approval {

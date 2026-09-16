@@ -28,6 +28,8 @@ backend/
       config.py          # Settings (pydantic-settings, reads .env)
       security.py         # require_api_key, rate_limit dependencies
       tracing.py           # OpenTelemetry setup + helpers (traced, inject/extract/link)
+      pricing.py            # Groq $/token table + estimate_cost_usd — used by the AI usage
+                             # monitor (GET /admin/usage), not real billing
       database.py, redis.py, logging.py
     events/              # Event schema, publisher, idempotency (atomic Redis claim), dead-letter
     models/              # SQLAlchemy models
@@ -102,6 +104,8 @@ pytest's `pythonpath` is already set to `backend` in `pyproject.toml`, so you us
 
 **9. The worker's `start_worker.sh` checks Qdrant collection existence via a raw `QdrantClient`, not `app.rag.vector_store` — on purpose.** Importing `app.rag.vector_store` (or `app.rag.retriever`) loads a real HuggingFace embedding model at import time (gotcha #1). The pre-check used to import it just to answer a yes/no question, silently doubling every worker cold-start's cost. Don't reintroduce that import there.
 
+**10. Token/cost usage (the admin console's "AI usage" section, `GET /admin/usage`) is read from Postgres (`agent_executions`), not from the OTel spans.** Every LLM call sets `llm.input_tokens`/`llm.output_tokens`/`llm.total_tokens` as span attributes (gotcha in Observability below), but spans only go to Jaeger — they're not queryable data. `AgentExecution` rows carry their own `input_tokens`/`output_tokens`/`total_tokens`/`llm_call_count`/`duration_ms`/`model` columns, populated separately by `agent_service.py`/`triage_service.py` from the same `response.usage_metadata` the span attributes come from. If you add a new LLM call site, you must accumulate its usage into both places independently — updating the span doesn't update the DB row and vice versa. For the delayed-order graph specifically, `agent_node` can run multiple times per graph invocation (the tool-call loop) plus once in `decision_node`, so usage is accumulated across calls via `_usage_delta()` (`delayed_order.py`) into running totals on `DelayedOrderState`, not just read from the last response — a naive "read the last LLM response's usage" implementation undercounts every run that used a tool.
+
 ## Testing conventions
 
 - `backend/tests/conftest.py` provides a `db_session` fixture: fresh in-memory SQLite per test, not Postgres. All models use plain SQLAlchemy types (no JSONB/ARRAY), so this is a faithful stand-in for service-layer tests. Concurrency tests need a *shared* SQLite DB across threads instead (plain `sqlite:///:memory:` gives each connection its own isolated DB) — see `test_approval_service_concurrency.py` for the `StaticPool` pattern.
@@ -122,6 +126,7 @@ Trace context propagates across the async event boundary: when the delay agent's
 - Prompt-injection mitigation on the triage agent (delimiting customer content, explicit system-prompt instruction) is real but unverified against an actual model — no automated test can confirm the LLM *obeys* the instruction without a paid API call. Treat it as a mitigation, not a guarantee.
 - Neither frontend has automated tests (no Vitest/RTL) — verification so far has been manual/Playwright, not committed as regression coverage.
 - CORS is permissive by default (`DEBUG=true` allows any localhost port). Set `DEBUG=false` and `CORS_ALLOWED_ORIGINS` (comma-separated) before any real deployment — see `main.py`.
+- The AI usage monitor's cost estimates (`pricing.py`, `GET /admin/usage`) use a hardcoded `$/token` table that isn't kept in sync with Groq's actual pricing page, and cost is computed at read time from *current* rates, not the rate that was live when a given run actually happened — fine for a rough efficiency signal, not for real billing/reconciliation. Unpriced models return `cost_usd: null` (surfaced as `cost_incomplete: true`) rather than a silently wrong `$0`.
 
 
 ## Git

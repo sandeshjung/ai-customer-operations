@@ -1,7 +1,11 @@
+import time
+
 from app.agents.graphs.triage_agent import triage_graph
 from app.agents.models import TicketPriority, TriageAction
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.tracing import traced
+from app.models.agent_execution import AgentExecution
 from app.models.support_ticket import SupportTicket, TicketStatus
 
 logger = get_logger(__name__)
@@ -34,6 +38,7 @@ def process_ticket(db, ticket_id: int, event_id: str):
         policy_context = "\n\n".join([r["content"] for r in policy_results])
 
         # Run triage agent
+        start_time = time.perf_counter()
         result = triage_graph.invoke(
             {
                 "ticket_id": ticket_id,
@@ -42,6 +47,7 @@ def process_ticket(db, ticket_id: int, event_id: str):
                 "policy_context": policy_context,
             }
         )
+        duration_ms = int((time.perf_counter() - start_time) * 1000)
 
         decision = result["decision"]
 
@@ -49,6 +55,21 @@ def process_ticket(db, ticket_id: int, event_id: str):
         span.set_attribute("priority", decision.priority)
         span.set_attribute("action", decision.action)
         span.set_attribute("requires_human", decision.requires_human)
+
+        db.add(
+            AgentExecution(
+                agent_name="triage_agent",
+                event_id=event_id,
+                input_data={"ticket_id": ticket_id},
+                decision=decision.model_dump(),
+                model=settings.LLM_MODEL,
+                input_tokens=result.get("llm_input_tokens", 0),
+                output_tokens=result.get("llm_output_tokens", 0),
+                total_tokens=result.get("llm_total_tokens", 0),
+                llm_call_count=result.get("llm_call_count", 0),
+                duration_ms=duration_ms,
+            )
+        )
 
         # update ticket based on triage
         db_ticket = db.get(SupportTicket, ticket_id)
@@ -86,7 +107,7 @@ def process_ticket(db, ticket_id: int, event_id: str):
             if decision.action == TriageAction.RESOLVE and not decision.requires_human:
                 db_ticket.status = TicketStatus.RESOLVED
 
-            db.commit()
+        db.commit()
 
     logger.info(
         "Ticket triage completed",
