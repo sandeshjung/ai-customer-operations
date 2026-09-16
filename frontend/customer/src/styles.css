@@ -1,18 +1,19 @@
 :root {
-  --bg: #faf6f0;
+  --bg: #eef0f3;
   --surface: #ffffff;
-  --border: #e8ddd0;
-  --text: #2b2420;
-  --text-muted: #786e63;
-  --text-faint: #a89c8d;
-  --accent: #c1673f;
-  --accent-soft: #f3e3d6;
-  --green: #3f7d5c;
-  --green-soft: #e3efe7;
-  --red: #b3492f;
-  --red-soft: #fbe9e3;
-  --radius: 16px;
-  --radius-sm: 10px;
+  --border: #d7dbe1;
+  --text: #12172a;
+  --text-muted: #5b6472;
+  --text-faint: #8991a1;
+  --accent: #3454d1;
+  --accent-dark: #253d9e;
+  --accent-soft: #e4e9fb;
+  --green: #1f8a52;
+  --green-soft: #e1f3e8;
+  --red: #c62f2f;
+  --red-soft: #fbe6e6;
+  --radius: 10px;
+  --radius-sm: 6px;
 }
 
 * {
@@ -32,19 +33,20 @@ body {
 h1,
 h2,
 h3 {
-  font-family: "Fraunces", Georgia, serif;
-  font-weight: 500;
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   margin: 0;
 }
 
 .mono {
-  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace;
 }
 
 .page {
   max-width: 640px;
   margin: 0 auto;
-  padding: 56px 20px 40px;
+  padding: 52px 20px 40px;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -52,12 +54,11 @@ h3 {
 
 .hero {
   text-align: center;
-  margin-bottom: 36px;
+  margin-bottom: 32px;
 }
 
 .hero h1 {
-  font-size: 2.1rem;
-  letter-spacing: -0.01em;
+  font-size: 2rem;
 }
 
 .hero p {
@@ -73,9 +74,10 @@ h3 {
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
   border-radius: var(--radius);
   padding: 28px;
-  box-shadow: 0 1px 3px rgba(60, 45, 30, 0.04);
+  box-shadow: 0 1px 2px rgba(18, 23, 42, 0.05);
 }
 
 .card + .card {
@@ -99,15 +101,17 @@ h3 {
 }
 
 .field label {
-  font-size: 0.88rem;
-  font-weight: 500;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--text-muted);
 }
 
 input[type="text"],
 input[type="email"] {
-  font-family: inherit;
-  font-size: 1rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.98rem;
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -120,6 +124,7 @@ input[type="email"]:focus {
   outline: none;
   border-color: var(--accent);
   background: var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 button {
@@ -130,8 +135,10 @@ button {
 .lookup-form button[type="submit"] {
   margin-top: 6px;
   padding: 13px 18px;
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: #fff;
   background: var(--accent);
   border: none;
@@ -144,13 +151,14 @@ button {
 }
 
 .lookup-form button[type="submit"]:not(:disabled):hover {
-  background: #a8552f;
+  background: var(--accent-dark);
 }
 
 .error-message {
   margin: 16px 0 0;
   padding: 12px 14px;
   border-radius: var(--radius-sm);
+  border-left: 3px solid var(--red);
   background: var(--red-soft);
   color: var(--red);
   font-size: 0.95rem;
@@ -160,7 +168,8 @@ button {
   border: none;
   background: none;
   color: var(--accent);
-  font-size: 0.95rem;
+  font-weight: 600;
+  font-size: 0.92rem;
   padding: 0;
 }
 
@@ -182,54 +191,64 @@ button {
 }
 
 .eyebrow {
-  font-size: 0.82rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
   color: var(--text-faint);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   margin-bottom: 4px;
 }
 
 .order-card h2 {
-  font-size: 1.5rem;
+  font-size: 1.4rem;
 }
 
 .status-pill {
   flex: 0 0 auto;
-  padding: 6px 12px;
-  border-radius: 999px;
-  font-size: 0.82rem;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.74rem;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   white-space: nowrap;
+  border: 1px solid transparent;
 }
 
 .status-pill.ontrack {
   background: var(--green-soft);
   color: var(--green);
+  border-color: color-mix(in srgb, var(--green) 30%, transparent);
 }
 
 .status-pill.delayed {
   background: var(--red-soft);
   color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 30%, transparent);
 }
 
 .status-pill.status-open,
 .status-pill.status-in_progress {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-dark);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .status-pill.status-resolved,
 .status-pill.status-closed {
   background: var(--green-soft);
   color: var(--green);
+  border-color: color-mix(in srgb, var(--green) 30%, transparent);
 }
 
 .notice {
   margin: 18px 0 0;
   padding: 12px 14px;
   border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent);
   background: var(--accent-soft);
-  color: #8a4526;
+  color: var(--accent-dark);
   font-size: 0.95rem;
 }
 
@@ -241,7 +260,10 @@ button {
 }
 
 .detail-grid dt {
-  font-size: 0.8rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   color: var(--text-faint);
   margin-bottom: 3px;
 }
@@ -255,12 +277,14 @@ button {
 .items {
   margin-top: 26px;
   padding-top: 22px;
-  border-top: 1px solid var(--border);
+  border-top: 1px dashed var(--border);
 }
 
 .shipment h3,
 .items h3 {
-  font-size: 1.05rem;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   margin-bottom: 4px;
 }
 
@@ -291,7 +315,7 @@ button {
 
 .tickets li {
   padding-bottom: 14px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px dashed var(--border);
 }
 
 .tickets li:last-child {
@@ -307,7 +331,7 @@ button {
 }
 
 .ticket-subject {
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .muted {
@@ -352,7 +376,7 @@ button {
   }
 
   .hero h1 {
-    font-size: 1.7rem;
+    font-size: 1.6rem;
   }
 
   .card {
