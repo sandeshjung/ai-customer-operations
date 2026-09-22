@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
 
     LLM_API_KEY: str | None = None
-    LLM_MODEL: str = "llama-3.1-8b-instant"
+    LLM_MODEL: str = "openai/gpt-oss-120b"
 
     OTEL_ENABLED: bool = True
     OTEL_SERVICE_NAME: str = "ai-customer-operations"

@@ -13,15 +13,23 @@ an evaluation harness — plus the operational bugs that only show up once
 you actually build this stuff (races, idempotency, Docker cold-start
 reliability) rather than just the happy path.
 
+> **Want depth?** [ARCHITECTURE.md](ARCHITECTURE.md) has the event-flow
+> sequence diagram, the data model, **one real delayed order traced end to
+> end** (actual event JSON, tool calls, decision, ticket, and Jaeger
+> traces), the API auth boundary, and a list of gaps found while verifying
+> these docs against the running system.
+
 ## Architecture
 
 ![System architecture: Order Monitor publishes ORDER_DELAYED to Redis Streams; an Event Consumer worker routes it to the Delayed Order Agent or the Triage Agent; the Delayed Order Agent's decision passes through Guardrails into either a Human Approval Queue or auto-execution; both converge on an Action Service that creates a Support Ticket and Notification; escalated tickets re-enter Redis Streams as TICKET_CREATED; both agents share Postgres, a hybrid BM25+Qdrant RAG layer, and the Groq LLM; every call is traced to OpenTelemetry and every run's token usage is recorded for the admin console's AI usage monitor.](image/architecture.png)
 
 **Core flow:** `ORDER_DELAYED` event → Delayed Order Agent investigates
 (tool calls + hybrid RAG over the shipping policy) → decision → guardrails
-check → auto-executed or queued for human approval → if it creates a
-ticket, `TICKET_CREATED` event → Triage Agent classifies it → optionally,
-a customer notification.
+check → auto-executed or queued for human approval → executing it creates
+a support ticket (and a customer notification, if the agent drafted a
+message) → escalation and contact-customer tickets publish
+`TICKET_CREATED` → Triage Agent classifies the ticket and can raise its
+priority.
 
 ## What's included
 
@@ -45,12 +53,13 @@ investigation, just judgment.
 ### Retrieval-augmented generation
 
 Policy documents are retrieved with a **hybrid search**: BM25 (keyword)
-and Qdrant vector (semantic) search run in parallel, then fused with
-**Reciprocal Rank Fusion** (`score = Σ 1/(k + rank)`, k=60) rather than a
-naive score blend, so a strong keyword match and a strong semantic match
-both surface even when their raw scores aren't comparable. Retrieval
-results are also cached in-process (LRU, 50 entries) on the normalized
-query, visible as a `cache_hit` span attribute in traces.
+and Qdrant vector (semantic) search each return candidates, which are
+then fused with **Reciprocal Rank Fusion** (`score = Σ 1/(k + rank)`,
+k=60) rather than a naive score blend, so a strong keyword match and a
+strong semantic match both surface even when their raw scores aren't
+comparable. Retrieval results are also cached in-process (LRU, 50
+entries), keyed on the lowercased query's first 50 characters, and
+visible as a `cache_hit` span attribute in traces.
 
 The agent is instructed to retrieve policy before making a decision and
 never invent policy content — decisions carry their supporting evidence
@@ -98,8 +107,11 @@ async event boundary: when an auto-executed decision publishes a
 follow-up event, the trace context is injected into the event payload so
 the consumer continues the *same* trace. The human-approval path is
 different on purpose — by the time someone clicks Approve, the original
-trace is long closed, so that path uses an OTel **Link** (a cross-trace
-reference) instead of a parent-child relationship. Exports to Jaeger
+trace is long closed, so that path is designed to use an OTel **Link** (a
+cross-trace reference) instead of a parent-child relationship. As built,
+the Link is never populated and the approval span carries only an
+`original_trace_id` attribute (see
+[ARCHITECTURE.md](ARCHITECTURE.md#gaps-found-while-writing-this)). Exports to Jaeger
 locally by default; swapping to Langfuse is a two-environment-variable
 change, since Langfuse OSS ingests OTLP natively.
 
@@ -115,7 +127,10 @@ would silently undercount any run that used a tool. The admin console's
 usage panel aggregates this into token/cost totals per agent and model,
 plus a per-run breakdown with links back into Jaeger by trace ID. Cost is
 estimated from a small `$/token` pricing table — a rough efficiency
-signal, explicitly not billing-grade.
+signal, explicitly not billing-grade. Two current gaps: triage runs are
+recorded with zero tokens (the graph's state schema drops the usage
+keys), and the default model isn't in the pricing table, so cost shows
+as incomplete.
 
 ### Security
 
@@ -126,11 +141,14 @@ signal, explicitly not billing-grade.
   not a determined attacker.
 - **CORS**: environment-aware — permissive `localhost:*` only in debug
   mode, an explicit origin allowlist otherwise.
-- **Scoped public surface**: the customer portal's endpoints (ticket
-  list, order lookup) are intentionally unauthenticated, since a guest
-  portal can't require an API key — order ID + email match is a guessing
-  deterrent there, not real authentication, and that boundary is kept
-  deliberately narrow rather than loosening auth elsewhere to match.
+- **Public reads**: writes and `/admin/*` require the key; every other
+  `GET` is public, because a guest portal can't hold an API key. The
+  portal's order lookup requires order ID + email and is rate-limited —
+  a guessing deterrent, not real authentication. The public reads are
+  wider than the portal needs, though (`GET /tickets` and
+  `GET /orders/delayed` return customer emails unfiltered); the full
+  endpoint-by-endpoint table and the fix are in
+  [ARCHITECTURE.md → API surface](ARCHITECTURE.md#api-surface).
 
 ### Evaluation harness
 
@@ -148,7 +166,7 @@ resumes where it left off instead of restarting from scratch.
 
 Python 3.12, FastAPI, PostgreSQL, Redis (event bus + rate limiting +
 idempotency), Qdrant (vector store) + BM25 (keyword search), LangGraph,
-Groq (LLM provider, Llama 3.1), OpenTelemetry + Jaeger, React + Vite,
+Groq (LLM provider, `openai/gpt-oss-120b` by default), OpenTelemetry + Jaeger, React + Vite,
 Docker Compose, uv, Alembic, pytest.
 
 ## Getting started (from a fresh clone)
@@ -166,11 +184,14 @@ Docker Compose, uv, Alembic, pytest.
 cp .env.example .env
 ```
 
-Edit `.env` and set at minimum:
+Edit `.env` and set:
 - `LLM_API_KEY` — your Groq key
-- `ADMIN_API_KEY` — any string you choose; it gates all admin/mutating endpoints (`.env.example` doesn't list this yet — add it yourself)
+- `ADMIN_API_KEY` — any string you choose; it gates all admin/mutating endpoints
 
-Everything else has a working local default.
+Everything else has a working local default. `LLM_MODEL` defaults to
+`openai/gpt-oss-120b`; Groq retires models periodically, so if the worker
+logs `model_not_found`, list what your key can use with
+`curl https://api.groq.com/openai/v1/models -H "Authorization: Bearer $LLM_API_KEY"`.
 
 ### 2. Start the stack
 
@@ -182,13 +203,16 @@ This starts Postgres, Redis, Qdrant, Jaeger, the API, the worker, an
 autoheal watchdog for the worker, and both frontends (built and served via
 nginx). First start takes longer — the worker downloads an embedding model
 and, if the Qdrant collection is empty, runs the knowledge-base ingestion
-automatically.
+automatically. The containers are image snapshots: after changing code,
+`docker compose up -d --build` or they'll keep running the old version.
 
 Check everything is up:
 
 ```bash
 docker compose ps
-curl http://localhost:8000/health
+curl http://localhost:8000/health              # API liveness
+curl http://localhost:8000/api/v1/health/llm   # configured model + whether a Groq key is set
+curl http://localhost:8001/health              # worker liveness (heartbeat-based)
 ```
 
 ### 3. Run migrations and seed data
@@ -200,11 +224,18 @@ manually (or if running the API outside Docker):
 PYTHONPATH=backend uv run alembic upgrade head
 ```
 
-Seed synthetic customers, orders, shipments, and products:
+Seed synthetic customers, orders, shipments, and products (5,000
+customers, 10,000 orders — a few seconds):
 
 ```bash
 make seed
 ```
+
+`make seed` wipes and regenerates the seed tables, but not the tickets,
+approvals, and notifications the agents create — so once the agents have
+run, re-seeding fails with a foreign-key error (and changes nothing). To
+start over, `docker compose down -v` (deletes **all** data volumes), then
+repeat from step 2.
 
 ### 4. Use it
 
@@ -212,16 +243,20 @@ make seed
 |---|---|
 | Admin console | http://localhost:8080 (or `cd frontend/admin && npm install && npm run dev` → http://localhost:5173) |
 | Customer portal | http://localhost:8081 (or `cd frontend/customer && npm install && npm run dev` → http://localhost:5174) |
-| API | http://localhost:8000 (docs at `/docs`) |
+| API | http://localhost:8000 (interactive docs at `/docs`) |
 | Jaeger (traces) | http://localhost:16686 |
 
 The admin console needs the `ADMIN_API_KEY` from step 1, entered into its
 header field — it's stored in your browser's `localStorage`, not baked in.
 
 To see the agents actually do something: in the admin console's "Delayed
-orders" panel, use "Publish N to event stream" (small N — each one costs a
-real LLM call and is paced ~5s apart) and watch approvals/tickets/
-notifications/AI usage appear live.
+orders" panel, use "Publish N to event stream" with a small N. Each event
+is a full agent run — about 6 LLM calls and 8–9k tokens in practice —
+and the worker sleeps 30 s after every event, so expect roughly one per
+minute (see `CLAUDE.md`, gotcha #3). Watch approvals/tickets/notifications/AI usage appear live,
+or follow along with `docker compose logs -f worker`.
+[ARCHITECTURE.md](ARCHITECTURE.md#worked-example-one-delayed-order-end-to-end)
+walks through exactly this for one real order.
 
 ### 5. Run tests
 
@@ -231,17 +266,30 @@ make test
 uv run pytest backend/tests/services/
 ```
 
-A handful of test files need real network access (HuggingFace embedding
-model download) and a populated Qdrant collection, and are expected to
-fail in a sandboxed/offline environment — that's an environment
-limitation, not a code bug.
+Expect 6 failures in `tests/agents/test_delayed_order.py`,
+`tests/agents/test_rag_integration.py`, and `tests/rag/test_policy_search.py`.
+These depend on live services (the Groq API, a HuggingFace model download,
+a populated Qdrant), and `conftest.py` deliberately injects a dummy Groq
+key, so they fail even online; a couple have also drifted from the code
+they test. Everything else — service layer, API, concurrency, security —
+runs against in-memory SQLite with external calls mocked.
 
 ```bash
 make evaluate-quick   # agent + RAG eval, first 3 scenarios only (cheap smoke test)
 make evaluate          # full evaluation run — costs real LLM calls
+make evaluate-reset    # clear checkpoints — do this after changing LLM_MODEL
 ```
 
+Both exit non-zero if any accuracy gate fails, which at 3 scenarios is
+routine. Results are checkpointed and reused across runs (marked
+`(cached)` in the output), so without `make evaluate-reset` you may be
+looking at an earlier run's model.
+
 ## Local development without Docker for the backend
+
+Stop the `api` and `worker` containers first (`docker compose stop api worker`)
+— otherwise they fight over port 8000 and split events from the same
+Redis consumer group with your local worker.
 
 ```bash
 uv sync
@@ -251,6 +299,24 @@ make seed
 make dev                                             # API with --reload
 PYTHONPATH=backend uv run python backend/scripts/run_worker.py   # separate terminal
 ```
+
+## Repository tour
+
+Five minutes, in this order:
+
+1. [`backend/app/workers/event_consumer.py`](backend/app/workers/event_consumer.py) — the whole event lifecycle: claim, route by type, retry, dead-letter.
+2. [`backend/app/agents/graphs/delayed_order.py`](backend/app/agents/graphs/delayed_order.py) — the LangGraph tool loop, the decision prompt, usage accumulation. [`guardrails.py`](backend/app/agents/guardrails.py) is next to it and is ten lines.
+3. [`backend/app/services/`](backend/app/services/) — `action_service.py` (what executing a decision means), `approval_service.py` (the atomic claim), `triage_service.py`.
+4. [`backend/app/agents/graphs/triage_agent.py`](backend/app/agents/graphs/triage_agent.py) — the prompt-injection delimiting.
+5. [`backend/tests/services/test_approval_service_concurrency.py`](backend/tests/services/test_approval_service_concurrency.py) — a real threaded race test, not a mock.
+
+Elsewhere: `app/api/` is one router per resource; `app/rag/` is the
+hybrid retriever; `backend/evaluation/` is the eval harness (its own
+[README](backend/evaluation/README.md)); `frontend/admin` and
+`frontend/customer` are the two React apps. `CLAUDE.md` is context for
+AI coding agents, but its "non-obvious things" list is worth a human
+skim too. The top-level `src/`, `workers/`, `infrastructure/`, and
+`notebook/` directories are scaffolding leftovers — nothing runs from them.
 
 ## Design notes and known limitations
 
@@ -269,6 +335,10 @@ PYTHONPATH=backend uv run python backend/scripts/run_worker.py   # separate term
 - Evaluation datasets are intentionally small (12–15 scenarios each) to
   stay inside a free-tier LLM quota — treat the pass/fail gates as
   smoke tests, not statistically rigorous benchmarks.
+- Verifying these docs against the running system turned up a handful of
+  real bugs (the approval-path trace Link, triage token accounting, seed
+  re-runs, and others) that are documented but deliberately not yet fixed —
+  see [ARCHITECTURE.md → Gaps](ARCHITECTURE.md#gaps-found-while-writing-this).
 
 ## License
 
