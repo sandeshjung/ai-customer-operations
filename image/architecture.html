@@ -1,0 +1,408 @@
+<title>System Architecture</title>
+<style>
+  :root {
+    --bg: #12151a;
+    --surface: #181c23;
+    --surface-raised: #1e232b;
+    --border: #2a303a;
+    --border-soft: #333a46;
+    --text: #e9e7e2;
+    --text-muted: #8b93a1;
+    --text-faint: #5b6472;
+    --amber: #d8a947;
+    --teal: #4f9da6;
+    --green: #6fa97a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    padding: 40px 16px 56px;
+  }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+
+  header {
+    margin-bottom: 28px;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--teal);
+    margin: 0 0 10px;
+  }
+
+  h1 {
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 10px;
+    text-wrap: balance;
+  }
+
+  header p {
+    max-width: 62ch;
+    color: var(--text-muted);
+    font-size: 14.5px;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  figure {
+    margin: 0;
+    background: radial-gradient(circle at 18% 8%, #171b22 0%, var(--bg) 55%);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 16px 8px;
+  }
+
+  .svg-scroll {
+    overflow-x: auto;
+  }
+
+  svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-width: 780px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+
+  figcaption {
+    padding: 16px 10px 6px;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.6;
+    max-width: 76ch;
+  }
+
+  figcaption b { color: var(--text); font-weight: 600; }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    margin-top: 18px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: "IBM Plex Mono", monospace;
+  }
+
+  .legend-swatch {
+    width: 26px;
+    height: 0;
+    border-top-width: 2px;
+    border-top-style: solid;
+    flex-shrink: 0;
+  }
+
+  .sw-flow { border-color: var(--text-faint); }
+  .sw-human { border-color: var(--teal); border-top-width: 2.5px; }
+  .sw-trace { border-color: var(--text-faint); border-top-style: dotted; border-top-width: 2.5px; }
+  .sw-loop { border-color: var(--amber); border-top-style: dashed; }
+  .sw-email { border-color: var(--green); border-top-style: dotted; border-top-width: 2.5px; }
+
+  footer {
+    margin-top: 22px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px;
+    color: var(--text-faint);
+  }
+
+  @media (max-width: 640px) {
+    body { padding: 28px 12px 40px; }
+    h1 { font-size: 21px; }
+  }
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+  rel="stylesheet"
+/>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">AI Customer Operations</p>
+    <h1>System architecture</h1>
+    <p>
+      How an order delay becomes an AI decision, an audit trail, and — when
+      it matters — a human's call. Every box below is a real module in the
+      codebase; every arrow is a real call or event, not a conceptual one.
+    </p>
+  </header>
+
+  <figure>
+    <div class="svg-scroll">
+<svg viewBox="0 -10 1200 985" role="img" aria-label="Architecture diagram: the Order Monitor and the admin console's demo simulator publish ORDER_DELAYED and TICKET_CREATED to Redis Streams; an Event Consumer worker routes events to the Delayed Order Agent or the Triage Agent; the Delayed Order Agent's decision passes through Guardrails into either a Human Approval Queue or auto-execution; both converge on an Action Service that creates a Support Ticket and acknowledges it to the customer; escalated and contact-customer tickets re-enter Redis Streams as TICKET_CREATED; the Triage Agent updates the ticket and emails the customer a status update; every customer email links back to the order in the customer portal; both agents share Postgres, a hybrid BM25+Qdrant RAG layer, and the Groq LLM; every call is traced to OpenTelemetry, and every run's token usage and tool calls are recorded per task for the admin console's AI usage page and live timeline.">
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+    </marker>
+    <marker id="arrow-teal" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4f9da6" />
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6fa97a" />
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#d8a947" />
+    </marker>
+  </defs>
+
+  <!-- ===== styles for this figure ===== -->
+  <style>
+    .box { fill: #181c23; stroke: #2a303a; stroke-width: 1.3; }
+    .box-em { fill: #1e232b; stroke: #333a46; stroke-width: 1.4; }
+    .box-human { fill: #1e232b; stroke: #4f9da6; stroke-width: 1.6; }
+    .box-auto { fill: #1e232b; stroke: #6fa97a; stroke-width: 1.4; }
+    .lbl { fill: #e9e7e2; font-size: 13px; font-weight: 600; text-anchor: middle; }
+    .sub { fill: #8b93a1; font-size: 10.8px; text-anchor: middle; }
+    .laneTitle { fill: #5b6472; font-size: 11px; letter-spacing: 0.08em; text-anchor: start; text-transform: uppercase; }
+    .flow { stroke: #5b6472; stroke-width: 1.4; fill: none; marker-end: url(#arrow); color: #5b6472; }
+    .flow-em { stroke: #8b93a1; stroke-width: 1.6; fill: none; marker-end: url(#arrow); color: #8b93a1; }
+    .human { stroke: #4f9da6; stroke-width: 1.8; fill: none; marker-end: url(#arrow-teal); }
+    .human-lbl { fill: #4f9da6; font-size: 10.8px; text-anchor: middle; font-weight: 600; }
+    .trace { stroke: #5b6472; stroke-width: 1.2; fill: none; stroke-dasharray: 1.5 3.5; marker-end: url(#arrow); color: #5b6472; }
+    .trace-lbl { fill: #5b6472; font-size: 10px; text-anchor: middle; font-style: italic; }
+    .loop { stroke: #d8a947; stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; marker-end: url(#arrow-amber); }
+    .loop-lbl { fill: #d8a947; font-size: 10.5px; text-anchor: middle; font-weight: 600; }
+    .flow-lbl { fill: #8b93a1; font-size: 10.5px; text-anchor: middle; }
+    .cyl { fill: #181c23; stroke: #2a303a; stroke-width: 1.3; }
+    .email { stroke: #6fa97a; stroke-width: 1.4; fill: none; stroke-dasharray: 2 4; stroke-linecap: round; marker-end: url(#arrow-green); }
+    .email-lbl { fill: #6fa97a; font-size: 10.5px; text-anchor: middle; font-weight: 600; }
+  </style>
+
+  <!-- ===================== LEFT LANE: frontends / API ===================== -->
+  <text x="30" y="20" class="laneTitle">Frontends</text>
+
+  <rect x="30" y="30" width="250" height="60" rx="7" class="box" />
+  <text x="155" y="55" class="lbl">Admin console</text>
+  <text x="155" y="72" class="sub">approvals · simulate · tickets</text>
+  <text x="155" y="85" class="sub">notifications · AI usage per task</text>
+
+  <rect x="30" y="106" width="250" height="52" rx="7" class="box" />
+  <text x="155" y="128" class="lbl">Customer portal</text>
+  <text x="155" y="145" class="sub">track order · /?order= links</text>
+
+  <path d="M155,90 V100 M155,158 V168 Q155,178 175,178 H240" class="flow" />
+  <path d="M155,158 V178" class="flow" style="marker-end:none" />
+
+  <rect x="30" y="188" width="250" height="60" rx="7" class="box-em" />
+  <text x="155" y="213" class="lbl">FastAPI</text>
+  <text x="155" y="230" class="sub">X-API-Key auth · rate limiting</text>
+  <text x="155" y="243" class="sub">CORS allowlist</text>
+
+  <!-- FastAPI -> Human Approval Queue (the human-in-the-loop crossing) -->
+  <path d="M280,225 C 375,225 375,700 420,710" class="human" />
+  <text x="378" y="310" class="human-lbl" transform="rotate(-90 378 310)">reviews &amp; approves</text>
+
+  <!-- ===================== CENTER SPINE ===================== -->
+  <text x="420" y="20" class="laneTitle">Event-driven pipeline</text>
+
+  <rect x="420" y="30" width="440" height="56" rx="7" class="box" />
+  <text x="640" y="54" class="lbl">Order Monitor · Demo simulator</text>
+  <text x="640" y="71" class="sub">delay sweep · simulated delayed orders &amp; complaints</text>
+
+  <line x1="640" y1="86" x2="640" y2="118" class="flow" />
+
+  <rect x="420" y="120" width="440" height="80" rx="7" class="box-em" />
+  <text x="640" y="145" class="lbl">Redis Streams — event bus</text>
+  <text x="640" y="163" class="sub">atomic-claim idempotency (SET NX)</text>
+  <text x="640" y="178" class="sub">dead-letter stream on failure</text>
+
+  <line x1="640" y1="200" x2="640" y2="232" class="flow" />
+
+  <rect x="420" y="234" width="440" height="52" rx="7" class="box" />
+  <text x="640" y="264" class="lbl">Event Consumer (worker)</text>
+
+  <path d="M580,286 C 540,300 500,300 500,318" class="flow" />
+  <path d="M700,286 C 740,300 780,300 780,318" class="flow" />
+
+  <rect x="420" y="320" width="210" height="90" rx="7" class="box" />
+  <text x="525" y="345" class="lbl">Delayed Order</text>
+  <text x="525" y="360" class="lbl">Agent</text>
+  <text x="525" y="378" class="sub">tool-calling loop</text>
+  <text x="525" y="392" class="sub">(≤5 iterations)</text>
+
+  <rect x="650" y="320" width="210" height="90" rx="7" class="box" />
+  <text x="755" y="341" class="lbl">Triage Agent</text>
+  <text x="755" y="359" class="sub">single-shot classification</text>
+  <text x="755" y="372" class="sub">+ prompt-injection</text>
+  <text x="755" y="385" class="sub">delimiting</text>
+
+  <line x1="525" y1="410" x2="525" y2="442" class="flow" />
+  <line x1="755" y1="410" x2="755" y2="442" class="flow" />
+
+  <rect x="420" y="444" width="210" height="70" rx="7" class="box-em" />
+  <text x="525" y="470" class="lbl">Guardrails</text>
+  <text x="525" y="487" class="sub">CRITICAL/ESCALATE ⇒</text>
+  <text x="525" y="500" class="sub">requires_human</text>
+
+  <rect x="650" y="444" width="210" height="70" rx="7" class="box" />
+  <text x="755" y="470" class="lbl">Update ticket</text>
+  <text x="755" y="487" class="sub">priority / status</text>
+  <text x="755" y="500" class="sub">+ status-update email</text>
+
+  <path d="M480,514 C 460,540 440,555 440,572" class="flow" />
+  <path d="M570,514 C 600,540 640,555 640,572" class="flow" />
+
+  <rect x="420" y="574" width="210" height="70" rx="7" class="box-human" />
+  <text x="525" y="600" class="lbl">Human Approval</text>
+  <text x="525" y="616" class="lbl">Queue</text>
+  <text x="525" y="633" class="sub">admin reviews in console</text>
+
+  <rect x="650" y="574" width="210" height="70" rx="7" class="box-auto" />
+  <text x="755" y="605" class="lbl">Auto-execute</text>
+  <text x="755" y="622" class="sub">requires_human = false</text>
+
+  <path d="M525,644 C 525,668 640,672 640,690" class="flow-em" />
+  <text x="540" y="668" class="flow-lbl">approved</text>
+  <path d="M755,644 C 755,668 640,672 640,690" class="flow-em" />
+
+  <rect x="420" y="692" width="440" height="56" rx="7" class="box-em" />
+  <text x="640" y="717" class="lbl">Action Service</text>
+  <text x="640" y="734" class="sub">creates ticket · acknowledges it to the customer</text>
+
+  <path d="M580,748 C 540,762 500,762 500,780" class="flow" />
+  <path d="M700,748 C 740,762 780,762 780,780" class="flow" />
+
+  <rect x="420" y="782" width="210" height="96" rx="7" class="box" />
+  <text x="525" y="806" class="lbl">Support Ticket</text>
+  <text x="525" y="826" class="sub">ESCALATE /</text>
+  <text x="525" y="839" class="sub">CONTACT_CUSTOMER</text>
+  <text x="525" y="852" class="sub">re-enters as</text>
+  <text x="525" y="865" class="sub">TICKET_CREATED</text>
+
+  <rect x="650" y="782" width="210" height="96" rx="7" class="box" />
+  <text x="755" y="806" class="lbl">Customer emails</text>
+  <text x="755" y="826" class="sub">acknowledgement ·</text>
+  <text x="755" y="839" class="sub">triage status update</text>
+  <text x="755" y="852" class="sub">recorded; Mailjet when</text>
+  <text x="755" y="865" class="sub">MAILJET_DEMO_ENABLED</text>
+
+  <!-- Triage's ticket update -> status-update email (right-hand corridor) -->
+  <path d="M860,492 C 884,492 888,510 888,540 V 800 C 888,812 878,816 862,816" class="flow" />
+  <text x="896" y="660" class="flow-lbl" transform="rotate(90 896 660)">status update</text>
+
+  <!-- Every customer email links back to the order in the portal -->
+  <path d="M755,878 V 952 H 18 V 140 C 18,134 22,132 28,132" class="email" />
+  <text x="400" y="966" class="email-lbl">"View status" link in every email → customer portal /?order=&lt;id&gt;</text>
+
+  <!-- Support Ticket loop back into Redis Streams -->
+  <path d="M420,820 C 300,820 300,160 418,160" class="loop" />
+  <text x="303" y="700" class="loop-lbl" transform="rotate(-90 303 700)">TICKET_CREATED</text>
+
+  <!-- ===================== RIGHT LANE: shared services ===================== -->
+  <text x="940" y="20" class="laneTitle">Shared services</text>
+
+  <rect x="940" y="320" width="230" height="76" rx="7" class="box" />
+  <text x="1055" y="344" class="lbl">Groq LLM</text>
+  <text x="1055" y="361" class="sub">gpt-oss-120b, via LangChain</text>
+  <text x="1055" y="376" class="sub">temperature = 0</text>
+
+  <line x1="860" y1="355" x2="928" y2="355" class="flow" />
+  <line x1="860" y1="372" x2="928" y2="358" class="flow" />
+
+  <rect x="940" y="410" width="230" height="66" rx="7" class="box" />
+  <text x="1055" y="434" class="lbl">Tool layer</text>
+  <text x="1055" y="450" class="sub">get_order · get_shipment</text>
+  <text x="1055" y="463" class="sub">get_customer</text>
+
+  <line x1="630" y1="365" x2="928" y2="435" class="flow" />
+
+  <path d="M1055,476 L1055,494" class="flow" />
+
+  <!-- postgres cylinder -->
+  <g>
+    <path d="M950,560 v-40 a75,10 0 0 1 150,0 v40 a75,10 0 0 1 -150,0" class="cyl" />
+    <ellipse cx="1025" cy="520" rx="75" ry="10" class="cyl" />
+    <text x="1025" y="546" class="lbl" font-size="12.5">PostgreSQL</text>
+  </g>
+  <line x1="1035" y1="476" x2="1030" y2="508" class="flow" />
+
+  <rect x="940" y="600" width="230" height="106" rx="7" class="box" />
+  <text x="1055" y="624" class="lbl">Hybrid RAG</text>
+  <text x="1055" y="642" class="sub">BM25 + Qdrant vector</text>
+  <text x="1055" y="655" class="sub">RRF fusion (k=60)</text>
+  <text x="1055" y="668" class="sub">LRU retrieval cache</text>
+  <text x="1055" y="683" class="sub">policy PDFs, chunked</text>
+
+  <path d="M1000,476 C 985,510 985,565 1010,598" class="flow" />
+  <text x="948" y="496" class="flow-lbl" text-anchor="start">search_shipping_policy</text>
+
+  <!-- RAG feeds Triage's pre-fetched policy context -->
+  <path d="M940,635 C 850,635 770,500 780,412" class="trace" />
+  <text x="850" y="560" class="trace-lbl">pre-fetched by triage_service</text>
+
+  <rect x="940" y="726" width="230" height="80" rx="7" class="box" />
+  <text x="1055" y="752" class="lbl">OpenTelemetry</text>
+  <text x="1055" y="769" class="sub">→ Jaeger</text>
+  <text x="1055" y="784" class="sub">(Langfuse-compatible OTLP)</text>
+
+  <path d="M630,410 C 780,470 900,600 985,724" class="trace" />
+  <path d="M860,365 C 900,500 950,650 1000,724" class="trace" />
+  <path d="M940,660 C 900,690 920,710 985,726" class="trace" />
+  <text x="895" y="470" class="trace-lbl">traces</text>
+
+  <rect x="940" y="826" width="230" height="96" rx="7" class="box" />
+  <text x="1055" y="850" class="lbl">agent_executions</text>
+  <text x="1055" y="868" class="sub">tokens · cost · tool-call steps</text>
+  <text x="1055" y="881" class="sub">per run, grouped by task_id</text>
+  <text x="1055" y="900" class="sub">(not just trace data)</text>
+
+  <path d="M630,440 C 850,600 1000,700 1055,824" class="flow" style="stroke-dasharray:1 3" />
+  <path d="M860,395 C 950,600 1030,700 1055,824" class="flow" style="stroke-dasharray:1 3" />
+
+  <!-- agent_executions feeds back up to Admin console's AI usage monitor -->
+  <path d="M1170,870 C 1195,870 1195,10 1160,10 L 160,10 C 145,10 145,20 145,28" class="loop" />
+  <text x="640" y="6" class="loop-lbl">AI usage per task · live simulator timeline</text>
+
+</svg>
+    </div>
+
+    <figcaption>
+      <b>Reading the diagram:</b> a plain arrow is a direct call or DB write;
+      a dotted line is a trace sent to OpenTelemetry; the teal line is the
+      one human-in-the-loop boundary in the system — everything on the far
+      side of it waits for a person. Amber dashed lines are feedback loops:
+      an escalated or contact-customer ticket re-publishes as a new event,
+      and every run's token usage and tool calls flow back up into the
+      admin console's per-task usage page and live timeline. The green line
+      is the customer's way back in: every email links to the order in the
+      customer portal.
+    </figcaption>
+  </figure>
+
+  <div class="legend">
+    <div class="legend-item"><span class="legend-swatch sw-flow"></span>call / data flow</div>
+    <div class="legend-item"><span class="legend-swatch sw-human"></span>human-in-the-loop boundary</div>
+    <div class="legend-item"><span class="legend-swatch sw-trace"></span>OpenTelemetry trace</div>
+    <div class="legend-item"><span class="legend-swatch sw-loop"></span>feedback loop</div>
+    <div class="legend-item"><span class="legend-swatch sw-email"></span>customer email link</div>
+  </div>
+
+  <footer>ai-customer-operations — architecture as implemented, not as originally planned</footer>
+</div>

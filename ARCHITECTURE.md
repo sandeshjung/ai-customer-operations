@@ -8,10 +8,12 @@ boundary, and the reasoning (and known gaps) behind the main design choices.
 - [System overview](#system-overview)
 - [Event flow](#event-flow)
 - [Data model](#data-model)
+- [Customer emails](#customer-emails)
+- [Demo simulator and timelines](#demo-simulator-and-timelines)
 - [Worked example: one delayed order, end to end](#worked-example-one-delayed-order-end-to-end)
 - [API surface](#api-surface)
 - [Design rationale](#design-rationale)
-- [Gaps found while writing this](#gaps-found-while-writing-this)
+- [Known gaps](#known-gaps)
 
 ## System overview
 
@@ -23,7 +25,7 @@ Three processes do the work:
 |---|---|---|
 | **api** (FastAPI) | `backend/app/main.py`, `backend/app/api/` | Serves the REST API. Delay detection and human approvals also *run* here, so an approved decision is executed in the API process, not the worker. |
 | **worker** | `backend/app/workers/event_consumer.py` | Reads one event at a time from the Redis stream, runs the matching agent, then acks the event. |
-| **frontends** | `frontend/admin`, `frontend/customer` | Static React builds served by nginx. They talk to the API from the browser. |
+| **frontends** | `frontend/admin`, `frontend/customer` | Static React builds served by nginx. They talk to the API from the browser. The admin console is split into hash-routed pages (`#/simulate`, `#/tickets`, `#/notifications`, `#/usage`, Overview by default); each page polls only its own data. |
 
 Postgres holds all business state. Redis has three jobs: the event stream
 (`customer_operations_events`), the dead-letter stream
@@ -88,11 +90,11 @@ sequenceDiagram
     end
 
     Action->>PG: INSERT support_tickets (every resolution except NO_ACTION)
-    opt customer_message present
-        Action->>PG: INSERT notifications (log backend by default)
-    end
     opt resolution is ESCALATE or CONTACT_CUSTOMER
-        Action->>Stream: XADD TICKET_CREATED (with traceparent)
+        Action->>Stream: XADD TICKET_CREATED (with traceparent + task_id)
+    end
+    opt customer_message present, or ESCALATE / CONTACT_CUSTOMER ticket
+        Action->>PG: INSERT notifications (one email: the drafted message and/or a ticket acknowledgement, with a View status link)
     end
 
     Worker->>Stream: XACK, then sleep 30 s
@@ -102,6 +104,7 @@ sequenceDiagram
     Triage->>Groq: one classification call
     Groq-->>Triage: intent, priority, sentiment, action, confidence
     Triage->>PG: INSERT agent_executions, raise ticket priority if higher, RESOLVE sets RESOLVED
+    Triage->>PG: INSERT notifications (templated status update, with a View status link)
 ```
 
 What the diagram leaves out:
@@ -115,7 +118,13 @@ What the diagram leaves out:
   published for them. Only `ESCALATE` and `CONTACT_CUSTOMER` tickets reach
   the Triage Agent.
 - **Rejection.** Rejecting an approval flips the row to `REJECTED` and logs
-  it. Nothing is executed.
+  it. Nothing is executed and the customer isn't emailed.
+- **Customer-filed tickets.** A complaint filed through the simulator is
+  acknowledged by email and publishes `TICKET_CREATED` directly, so it goes
+  straight to triage with no delayed-order run in front of it. It's a task
+  of its own (see `task_id` below).
+- **Email delivery.** `INSERT notifications` always happens. A real email is
+  sent only when `MAILJET_DEMO_ENABLED=true`; see [Customer emails](#customer-emails).
 - **Pacing.** The worker sleeps 30 s after every event, whatever the outcome
   (see gotcha #3 in `CLAUDE.md`), so throughput is capped at about 2 events
   per minute.
@@ -214,8 +223,11 @@ erDiagram
         int id PK
         string agent_name "delayed_order_agent or triage_agent"
         string event_id
+        string task_id "indexed, nullable: event_id of the event that started the work"
+        int order_id "indexed, nullable, not a FK"
         json input_data
         json decision
+        json steps "nullable: tool calls and results, delayed-order agent only"
         string model "nullable"
         int input_tokens
         int output_tokens
@@ -232,13 +244,87 @@ Three things the diagram makes visible:
   exactly as the agent produced it. There is no link from an approval to the
   ticket it eventually creates.
 - **`agent_executions` has no foreign keys at all.** It relates to everything
-  else only through `event_id` (and, for triage, `input_data.ticket_id`),
-  because it's an audit and usage log, not business state.
+  else through plain indexed columns (`event_id`, `task_id`, `order_id`, and
+  for triage `input_data.ticket_id`), because it's an audit and usage log, not
+  business state. `order_id` lets the timeline find an order's runs with one
+  indexed query; `task_id` groups a delayed-order run with the triage run on
+  the ticket it created; `steps` records which tools the agent called and
+  what came back (results truncated to 1,500 characters).
 - **Tickets don't always need an order.** `support_tickets.order_id` is
-  nullable, so a ticket can exist without one. Every ticket the agents create
-  does have one.
+  nullable, so a ticket can exist without one. Every ticket the agents or the
+  simulator create does have one.
+
+## Customer emails
+
+Every customer email is built in `backend/app/services/customer_emails.py`
+and goes through `notification_service.send_notification()`, which always
+records a `notifications` row and, only when `MAILJET_DEMO_ENABLED=true`,
+also sends it via Mailjet (plain-text and HTML parts).
+
+| When | Email | Sent from |
+|---|---|---|
+| Delayed-order decision executed with a drafted `customer_message` | The agent's message. If an ESCALATE / CONTACT_CUSTOMER ticket was opened too, a line naming the ticket is appended, so it's one email, not two | `action_service.execute_decision` |
+| ESCALATE / CONTACT_CUSTOMER ticket opened, no drafted message | Acknowledgement: "We've received your request (ticket #N)" | `action_service.execute_decision` |
+| Customer files a ticket (simulator) | Acknowledgement quoting the customer's own subject line | `demo_service.create_customer_ticket` |
+| Triage finishes | Templated status update per outcome: resolved, escalated, with the support team, or reviewed | `triage_service.process_ticket` |
+
+Each email has a **View status** button linking to
+`{CUSTOMER_PORTAL_URL}/?order=<id>`. The portal reads `?order=`, looks the
+order up automatically, and lists the customer's tickets with their numbers,
+so "ticket #18" in an email can be matched on the page.
+
+Deliberate choices:
+
+- **Internal follow-ups stay silent.** `TRACK_SHIPMENT` / `CONTACT_CARRIER`
+  tickets are work for the operations team; the customer never asked for
+  anything, so no acknowledgement is sent.
+- **No internal labels or model reasoning.** An agent-created ticket's
+  subject ("ESCALATED: Delayed order (HIGH)") is never used in the
+  acknowledgement. The triage update is fixed wording per outcome, and the
+  triage agent's reasoning, priority and intent are never included.
+- **Escalations are acknowledged on approval.** ESCALATE always goes through
+  human review, so its acknowledgement is sent when someone clicks Approve,
+  not when the agent decides. A rejected decision sends nothing.
+- **Tests can't send real email.** `tests/conftest.py` forces
+  `MAILJET_DEMO_ENABLED=false`, because `Settings` also reads the repo's
+  real `.env`.
+
+## Demo simulator and timelines
+
+The admin console's Simulate page exists so the pipeline can be shown on
+demand instead of waiting for a real order to go late.
+
+- `POST /admin/demo/delayed-order` (`demo_service.create_delayed_order`)
+  creates an order with `expected_delivery = today − delay_days`, one seeded
+  product, and a shipment in the chosen state (`IN_TRANSIT`, `EXCEPTION`,
+  `LOST`, or none). It then publishes `ORDER_DELAYED` directly, not through
+  the monitor, and sets the monitor's daily dedupe key so "Publish N" won't
+  send the same order again. An optional `customer_email` places the order
+  for that customer, creating one if needed.
+- `POST /admin/demo/ticket` (`demo_service.create_customer_ticket`) files a
+  ticket as an order's customer, sends the acknowledgement, and publishes
+  `TICKET_CREATED`. With `customer_email` and no `order_id` it uses that
+  customer's most recent order.
+
+The timelines (`services/order_timeline.py`) are **assembled from rows the
+pipeline already writes**: `agent_executions`, `human_approvals`,
+`support_tickets` and `notifications`, plus Redis for two things the
+database can't answer. Queue position comes from comparing the event's
+stream ID with the consumer group's `last-delivered-id` (`XINFO GROUPS`,
+then `XRANGE` between them). Failures come from scanning the dead-letter
+stream for the event. Each response has a `state` (`in_progress`,
+`awaiting_approval`, `complete`, `failed`) so the UI knows when to stop
+polling. The module deliberately doesn't import the graphs or the worker,
+which would load the RAG stack at import time (`CLAUDE.md` gotcha #1). For
+the same reason `CONSUMER_GROUP` lives in `workers/config.py`.
 
 ## Worked example: one delayed order, end to end
+
+> This run predates ticket acknowledgement emails, triage status updates,
+> `task_id` and tool-call `steps`. On today's code the same run would also
+> record an acknowledgement email at approval and a triage status update, and
+> the `TICKET_CREATED` payload would carry `"task_id"` (the original
+> `ORDER_DELAYED` event ID). The flow is otherwise unchanged.
 
 Everything below is **captured output from a real run on 2026-09-22**, using
 the default model (`openai/gpt-oss-120b` on Groq) against the seeded
@@ -330,7 +416,7 @@ Two details worth pausing on:
   replacement shipment ... at no additional cost" is a commitment the company
   hasn't signed off on. This is exactly the kind of message the approval step
   exists to catch.
-- **`trace_context` is `null`.** See [Gaps](#gaps-found-while-writing-this).
+- **`trace_context` is `null`.** See [Known gaps](#known-gaps).
 
 The `agent_executions` row for the run:
 
@@ -411,7 +497,7 @@ flowchart LR
         b3 --> b4["rag.retrieve_policy"]
         b3 --> b5["llm.triage · 1.2 s"]
     end
-    T1 -. "joined only by the original_trace_id attribute (no OTel Link, see Gaps)" .-> T2
+    T1 -. "joined only by the original_trace_id attribute (no OTel Link, see Known gaps)" .-> T2
 ```
 
 The second trace shows cross-process propagation working. The span
@@ -422,12 +508,16 @@ payload.
 
 ### Reproducing it
 
+The easiest way is the admin console's **Simulate** page. Pick "Lost
+package", which almost always escalates and so goes through approval, and
+watch the timeline. Or do it by hand:
+
 ```bash
 docker compose up -d && make seed   # skip make seed if already seeded (see README)
-# Admin console → Delayed orders → Publish 1 to event stream, or:
+# Admin console → Overview → Delayed orders → Publish 1 to event stream, or:
 curl -X POST -H "X-API-Key: $ADMIN_API_KEY" "localhost:8000/api/v1/orders/monitor/delayed?limit=1"
 docker compose logs -f worker        # watch the tool loop
-# Approvals panel → Approve (if the guardrail routed it there), then open the trace link in "AI usage"
+# Overview → Pending approvals → Approve (if the guardrail routed it there), then open the trace link on the AI usage page
 ```
 
 ## API surface
@@ -440,22 +530,26 @@ table covers only who can call what.
 |---|---|---|
 | `GET /health` (root, no prefix) | public | liveness check |
 | `GET /api/v1/health/llm` | public | shows the configured model and whether a key is set (the key is never returned) |
-| `GET /portal/orders/{id}?email=` | public, **rate-limited 20/min per IP** | customer portal order lookup |
+| `GET /portal/orders/{id}` | public, **rate-limited 20/min per IP** | customer portal order lookup (the portal page itself also accepts `/?order=<id>`) |
 | `GET /tickets?status=&customer_id=` | public | customer portal (a customer's tickets), admin console (ticket list) |
 | `GET /orders/delayed` | public | admin console, "Delayed orders" panel |
 | `GET /orders/{id}`, `GET /customers/{id}`, `GET /products/{id}` | public | no frontend uses these, they're plain reads |
 | `POST /orders/monitor/delayed?limit=` | **X-API-Key**, rate-limited 5/min per IP | admin console "Publish N" |
 | `POST /customers`, `POST /products`, `POST /orders`, `POST /shipments/{order_id}` | **X-API-Key** | scripts / manual use |
 | `GET /admin/approvals/pending`, `POST /admin/approvals/{id}/approve`, `/reject` | **X-API-Key** (whole router) | admin console approvals |
-| `GET /admin/notifications`, `GET /admin/usage` | **X-API-Key** | admin console |
+| `GET /admin/notifications`, `GET /admin/usage` | **X-API-Key** | admin console. `/usage` returns totals, a per-agent breakdown, and `tasks` (runs grouped by `task_id`) |
+| `POST /admin/demo/delayed-order`, `POST /admin/demo/ticket` | **X-API-Key**, rate-limited 5/min per IP each | admin console Simulate page. These create real orders, customers and tickets |
+| `GET /admin/orders/{id}/timeline`, `GET /admin/tickets/{id}/timeline` (`?event_id=&message_id=` optional) | **X-API-Key** | admin console Simulate page (live timeline) |
 | worker `GET :8001/health` | public (separate process) | Docker healthcheck + autoheal |
 
 **Where the boundary actually sits:** writes and `/admin/*` need the key.
 Every other read is public. The intended reason is the customer portal: a
 guest who types in an order ID can't hold an API key, so the portal's lookup
-has to be open. It gets a rate limit and an order-ID + email match (with a
-single generic 404 either way, so it can't be used to enumerate valid order
-IDs) instead.
+has to be open. It looks orders up by number alone, with only a per-IP rate
+limit. Order IDs are sequential, so this is enumerable: anyone can read any
+order's items, shipment and tracking number by trying numbers. That's a
+deliberate demo-friendliness trade-off on synthetic data, not real access
+control.
 
 The honest caveat is that the public reads are wider than the portal needs:
 
@@ -464,8 +558,9 @@ The honest caveat is that the public reads are wider than the portal needs:
   (about 1.3 MB against the seed data).
 
 The admin console reads both of those without its key. Tightening this means
-moving those two reads behind `require_api_key`, and giving the portal a
-lookup that requires the email, like the order lookup does.
+moving those two reads behind `require_api_key`, and putting a second
+factor (the email on the order, or unguessable order references) back on
+the portal lookup.
 
 **Auth is one shared secret, not identity.** `reviewed_by` on an approval is
 whatever string the console sends (it prompts for a reviewer name and keeps
@@ -506,6 +601,23 @@ approve something the human never saw.
   original trace, since that trace closed minutes or hours earlier. In
   practice it currently doesn't; see the next section.
 
+**Per-task usage via a propagated `task_id`, not inferred.** A triage run
+belongs with the delayed-order run whose ticket it classified. Grouping by
+`order_id` would wrongly merge a customer's own complaint about the same
+order into that task. So `task_id` (the `ORDER_DELAYED` event ID) is passed
+explicitly: `agent_service` stores it, `execute_decision` forwards it in the
+`TICKET_CREATED` payload on both the auto and approval paths (the approval
+row already holds the event ID), and `triage_service` stores it. A
+customer-filed ticket has no `task_id` in its event, so its own event ID
+becomes its task. Rows from before the column existed were backfilled by the
+migration (see Known gaps).
+
+**Tool-call steps are reconstructed after the run, not instrumented in the
+graph.** The graph's final `messages` already contain each `AIMessage.tool_calls`
+and the matching `ToolMessage`. `agent_service.extract_tool_steps()` pairs
+them by `tool_call_id` and stores the list on `agent_executions.steps`. The
+graph code didn't change.
+
 **Hybrid retrieval with RRF.** BM25 and Qdrant results are fetched
 (sequentially, top `2 × limit` each) and fused with Reciprocal Rank Fusion
 (`Σ 1/(60 + rank)`). RRF uses only rank, not score, so there's no need to
@@ -520,11 +632,14 @@ checkpointing in the evaluation harness. All of it comes from the Groq free
 tier. Even with the 30 s sleep, the worked example's decision call hit two
 `429`s.
 
-## Gaps found while writing this
+## Known gaps
 
-These came up while verifying this document against the running system. They
-are **not fixed**: development is paused, and each one is recorded here so the
-docs describe what the code does rather than what it was meant to do.
+These are **not fixed**. Most came up while verifying this document against
+the running system, and a few while building the simulator and emails. Each
+is recorded here so the docs describe what the code does rather than what it
+was meant to do. (Fixed since the first version of this list: triage runs
+recorded zero tokens because `TriageState` didn't declare the usage keys.
+They're now declared, with a regression test, `test_triage_usage.py`.)
 
 - **The approval-path OTel Link is never created.** `approval_service.approve()`
   builds the Link from `decision.trace_context`. Nothing in production code
@@ -534,11 +649,6 @@ docs describe what the code does rather than what it was meant to do.
   searching for that ID, but Jaeger won't render it as a link.
   Fix: set `decision.trace_context = inject_trace_context()` next to
   `trace_id` in `decision_node`.
-- **Triage runs record zero token usage.** `triage_node` returns
-  `llm_input_tokens`, etc., but `TriageState` doesn't declare those keys, so
-  LangGraph drops them from the result. In the worked example, the triage
-  span shows 1,440 tokens and the `agent_executions` row shows 0 tokens and
-  0 LLM calls. The AI usage monitor therefore undercounts triage entirely.
 - **The default model has no price.** `pricing.py` lists only Llama/Gemma
   models, so with `openai/gpt-oss-120b` the usage monitor reports
   `cost_incomplete: true` and a total cost of 0.
@@ -558,3 +668,26 @@ docs describe what the code does rather than what it was meant to do.
   - `test_warranty_policy_retrieval` gets empty results.
 - **Stale reference.** `core/tracing.py`'s docstring points to
   `backend/docs/observability.md`, which doesn't exist.
+- **The portal shows internal ticket subjects.** The customer portal lists
+  agent-created tickets by their internal subject, e.g. "ESCALATED: Delayed
+  order (HIGH)". The emails avoid this, but the portal doesn't. Fix: a
+  customer-facing title for agent-created tickets.
+- **`get_order` mislabels a field.** `agents/tools/order_tools.py` returns the
+  expected delivery date under the key `expected_salary`, so that's what the
+  delayed-order agent sees in the tool result.
+- **Hitting the tool-iteration cap doesn't force escalation.** When
+  `tool_node` reaches `MAX_TOOL_ITERATIONS` it returns `requires_human: True`,
+  but nothing downstream reads it. The decision comes only from
+  `decision_node`.
+- **Pre-`task_id` triage runs were grouped by a heuristic.** The migration
+  attached an old triage run to the latest earlier delayed-order run on the
+  same order only if its ticket's subject starts with the agent's own prefixes
+  ("ESCALATED: Delayed order", "Delayed order - "). New rows don't rely on
+  this.
+- **Demo endpoints exist in every environment.** `/admin/demo/*` create real
+  orders, customers and tickets, and there's no setting to turn them off.
+  They're behind the admin key and rate-limited, but should be disabled
+  outside demo or staging.
+- **Real email reaches seeded addresses.** With `MAILJET_DEMO_ENABLED=true`,
+  the automatic path emails whatever address a seeded customer has. Use the
+  simulator's email field to target your own inbox.

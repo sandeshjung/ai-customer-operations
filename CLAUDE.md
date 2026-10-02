@@ -6,7 +6,7 @@ Context for Claude Code working in this repo. Read this before making changes �
 
 An event-driven AI customer operations platform. Two LLM agents monitor delayed orders and triage support tickets, decide what to do, and either act automatically or queue the decision for human approval. Built as a portfolio project demonstrating production-grade agent patterns: tool-calling, RAG, human-in-the-loop, observability, evaluation, and the operational bugs that show up once you actually build this stuff (races, idempotency, prompt injection) rather than just the happy path.
 
-Core flow: `ORDER_DELAYED` event → Delayed Order Agent investigates (tool calls: get_order, get_shipment, get_customer, search_shipping_policy) → decision → either auto-executed or queued for human approval → if it creates a ticket, `TICKET_CREATED` event → Triage Agent classifies it.
+Core flow: `ORDER_DELAYED` event → Delayed Order Agent investigates (tool calls: get_order, get_shipment, get_customer, search_shipping_policy) → decision → either auto-executed or queued for human approval → if it creates an ESCALATE/CONTACT_CUSTOMER ticket, the customer gets an acknowledgement email and `TICKET_CREATED` is published → Triage Agent classifies it and emails the customer a templated status update. Customer-filed tickets (admin console simulator) skip straight to the acknowledgement + triage. Every customer email links to `{CUSTOMER_PORTAL_URL}/?order=<id>`.
 
 ## Stack
 
@@ -21,9 +21,12 @@ backend/
     agents/
       graphs/          # delayed_order.py, triage_agent.py — the two LangGraph agents
       tools/            # DB-backed tools the delayed-order agent calls
+      prompts.py        # every agent LLM prompt (system prompts + prompt builders)
       models.py         # AgentDecision, TriageDecision (pydantic, not DB models)
       guardrails.py      # post-decision validation (e.g. CRITICAL severity forces requires_human)
-    api/                # FastAPI routers — one file per resource, incl. customer_portal.py
+    api/                # FastAPI routers — one file per resource, incl. customer_portal.py and
+                        # demo.py (simulator: POST /admin/demo/delayed-order, /admin/demo/ticket;
+                        # GET /admin/orders/{id}/timeline, /admin/tickets/{id}/timeline)
     core/
       config.py          # Settings (pydantic-settings, reads .env)
       security.py         # require_api_key, rate_limit dependencies
@@ -36,8 +39,14 @@ backend/
     rag/                  # hybrid (BM25 + vector) retrieval over policy docs
     schemas/              # pydantic request/response schemas for the API
     services/             # business logic — agent_service, triage_service, action_service,
-                           # approval_service, notification_service (see Mailjet note below)
+                           # approval_service, notification_service (see Mailjet note below),
+                           # customer_emails (all customer-facing email content + "View status"
+                           # link), demo_service + order_timeline (the admin console's Simulate
+                           # page: demo orders/complaints and their live timelines)
     workers/
+      config.py             # MAX_RETRIES, DEAD_LETTER_STREAM, CONSUMER_GROUP (here, not in
+                             # event_consumer.py, so the API can read queue position without
+                             # importing the worker — gotcha #1)
       event_consumer.py     # the Redis Streams polling loop — see gotchas below
       health.py              # liveness HTTP server + Redis heartbeat, used by the worker's
                               # Docker healthcheck and the autoheal container
@@ -45,10 +54,12 @@ backend/
   evaluation/              # agent accuracy eval harness, scaled for Groq free-tier limits
   scripts/                 # seed_database.py, run_worker.py, ingest_knowledge.py, start_worker.sh
   tests/
-frontend/admin/            # React admin console (note the typo — see above) — approvals,
-                            # delayed orders, tickets, notifications, dark ops-console UI
-frontend/customer/          # React customer portal — guest order lookup (order ID + email,
-                            # not real auth), read-only, light UI deliberately distinct from admin
+frontend/admin/            # React admin console, dark ops-console UI. Hash-routed pages:
+                            # Overview (approvals + delayed orders), Simulate, Support tickets,
+                            # Notifications, AI usage (per task) — each polls only its own data
+frontend/customer/          # React customer portal — guest order lookup by order number
+                            # only (no auth, IDs are enumerable), read-only, light UI deliberately
+                            # distinct from admin. /?order=<id> opens an order (email links)
 data/knowledge/             # policy PDFs, embedded into Qdrant
 docs/                        # plain-text source of the same policy docs (used for chunking/ingestion)
 Dockerfile                    # backend image, used by both the api and worker services below
@@ -96,15 +107,15 @@ pytest's `pythonpath` is already set to `backend` in `pyproject.toml`, so you us
 
 **5. Groq free-tier rate limits shape a lot of design choices here.** The evaluation harness (`backend/evaluation/`) has retry/backoff/checkpointing and an `EVAL_LIMIT` env var specifically because running the full eval suite can blow through free-tier quota. Don't casually scale up dataset sizes or remove the pacing without checking `backend/evaluation/README.md`.
 
-**6. `api`, `worker`, `admin-console`, and `customer-portal` all run as Docker containers, and Docker images are snapshots — they do NOT hot-reload source changes.** Editing a `.py` or frontend file and expecting the running container to pick it up will silently fail: you have to `docker compose up -d --build <service>` to rebuild. This bit us repeatedly in practice — e.g. toggling the Mailjet demo line in `notification_service.py` (see gotcha below) had zero effect until the container was rebuilt, and it's easy to end up with `api` and `worker` running two different versions of the same file if you rebuild one and not the other. When in doubt, `docker exec <container> grep <symbol> /app/backend/...` to check what code the container is actually running before debugging further.
+**6. `api`, `worker`, `admin-console`, and `customer-portal` all run as Docker containers, and Docker images are snapshots — they do NOT hot-reload source changes.** Editing a `.py` or frontend file and expecting the running container to pick it up will silently fail: you have to `docker compose up -d --build <service>` to rebuild. This bit us repeatedly in practice — e.g. changing Mailjet settings (see gotcha below) had zero effect until the container was recreated, and it's easy to end up with `api` and `worker` running two different versions of the same file if you rebuild one and not the other. When in doubt, `docker exec <container> grep <symbol> /app/backend/...` to check what code the container is actually running before debugging further.
 
 **7. Auth is a single shared secret, not per-user.** `ADMIN_API_KEY` gates all mutating endpoints and the whole `/admin/*` router, sent via `X-API-Key` header. There's no login/session system — don't assume `current_user`-style patterns exist anywhere. If `ADMIN_API_KEY` isn't set, protected endpoints fail closed with a 503 (not silently open).
 
-**8. `notification_service.send_notification()` has a real Mailjet backend, deliberately left commented out.** `_send_via_mailjet()` / `_demo_send_via_mailjet()` exist and work (see `MAILJET_*` settings), but the call site in `send_notification()` is commented by default — uncommenting it sends a real email using whatever's in `.env`. Always double check which state a running container actually has (gotcha #6) before assuming it's off.
+**8. `notification_service.send_notification()` sends real email via Mailjet when `MAILJET_DEMO_ENABLED=true`** (default `false`). That covers *every* customer email: delayed-order updates, ticket acknowledgements (ESCALATE / CONTACT_CUSTOMER tickets and customer-filed complaints) and triage status updates — all built in `customer_emails.py`, each with a "View status" link to `{CUSTOMER_PORTAL_URL}/?order=<id>`. With it on, the automatic path emails seeded customers' addresses too. Env changes only apply once `api`/`worker` are recreated (gotcha #6) — check `docker exec customer-operations-worker env | grep MAILJET` before assuming it's off. `tests/conftest.py` forces it off, since Settings also reads the repo's real `.env`.
 
 **9. The worker's `start_worker.sh` checks Qdrant collection existence via a raw `QdrantClient`, not `app.rag.vector_store` — on purpose.** Importing `app.rag.vector_store` (or `app.rag.retriever`) loads a real HuggingFace embedding model at import time (gotcha #1). The pre-check used to import it just to answer a yes/no question, silently doubling every worker cold-start's cost. Don't reintroduce that import there.
 
-**10. Token/cost usage (the admin console's "AI usage" section, `GET /admin/usage`) is read from Postgres (`agent_executions`), not from the OTel spans.** Every LLM call sets `llm.input_tokens`/`llm.output_tokens`/`llm.total_tokens` as span attributes (gotcha in Observability below), but spans only go to Jaeger — they're not queryable data. `AgentExecution` rows carry their own `input_tokens`/`output_tokens`/`total_tokens`/`llm_call_count`/`duration_ms`/`model` columns, populated separately by `agent_service.py`/`triage_service.py` from the same `response.usage_metadata` the span attributes come from. If you add a new LLM call site, you must accumulate its usage into both places independently — updating the span doesn't update the DB row and vice versa. For the delayed-order graph specifically, `agent_node` can run multiple times per graph invocation (the tool-call loop) plus once in `decision_node`, so usage is accumulated across calls via `_usage_delta()` (`delayed_order.py`) into running totals on `DelayedOrderState`, not just read from the last response — a naive "read the last LLM response's usage" implementation undercounts every run that used a tool. **Currently broken for triage:** `triage_node` returns `llm_*` keys but `TriageState` doesn't declare them, so LangGraph drops them and every triage `AgentExecution` row records 0 tokens / 0 calls.
+**10. Token/cost usage (the admin console's "AI usage" section, `GET /admin/usage`) is read from Postgres (`agent_executions`), not from the OTel spans.** Every LLM call sets `llm.input_tokens`/`llm.output_tokens`/`llm.total_tokens` as span attributes (gotcha in Observability below), but spans only go to Jaeger — they're not queryable data. `AgentExecution` rows carry their own `input_tokens`/`output_tokens`/`total_tokens`/`llm_call_count`/`duration_ms`/`model` columns, populated separately by `agent_service.py`/`triage_service.py` from the same `response.usage_metadata` the span attributes come from. If you add a new LLM call site, you must accumulate its usage into both places independently — updating the span doesn't update the DB row and vice versa. For the delayed-order graph specifically, `agent_node` can run multiple times per graph invocation (the tool-call loop) plus once in `decision_node`, so usage is accumulated across calls via `_usage_delta()` (`delayed_order.py`) into running totals on `DelayedOrderState`, not just read from the last response — a naive "read the last LLM response's usage" implementation undercounts every run that used a tool. Any key a node returns must also be declared on the graph's state class, or LangGraph silently drops it — this is how triage runs used to record 0 tokens (`test_triage_usage.py`). The usage page groups runs **per task** via `AgentExecution.task_id` — the `event_id` of the ORDER_DELAYED (or customer-filed TICKET_CREATED) that started the work, forwarded as `task_id` in the TICKET_CREATED payload by `execute_decision()`. A new agent or event path that doesn't forward it shows up as a separate task.
 
 ## Testing conventions
 
@@ -121,11 +132,15 @@ Trace context propagates across the async event boundary: when the delay agent's
 
 ## Known gaps (not fixed, don't assume they are)
 
-- `GET /tickets` and `GET /portal/orders/{id}` are intentionally public (no API key) — the customer portal needs them unauthenticated. The portal's order+email match is a guessing deterrent, not real security (see the comment in `customer_portal.py`).
+- `GET /tickets` and `GET /portal/orders/{id}` are intentionally public (no API key) — the customer portal needs them unauthenticated. The portal looks orders up by number alone, and order IDs are sequential, so any order's items/shipment/tracking (and, via `/tickets?customer_id=`, its customer's tickets) can be read by trying numbers — the rate limit only slows that down. Deliberate for the demo; see the comment in `customer_portal.py`.
 - Rate limiting is fixed-window (not sliding-window/token-bucket) — good enough to stop accidental abuse, not a determined attacker.
 - Prompt-injection mitigation on the triage agent (delimiting customer content, explicit system-prompt instruction) is real but unverified against an actual model — no automated test can confirm the LLM *obeys* the instruction without a paid API call. Treat it as a mitigation, not a guarantee.
 - Neither frontend has automated tests (no Vitest/RTL) — verification so far has been manual/Playwright, not committed as regression coverage.
 - CORS is permissive by default (`DEBUG=true` allows any localhost port). Set `DEBUG=false` and `CORS_ALLOWED_ORIGINS` (comma-separated) before any real deployment — see `main.py`.
+- The customer portal lists agent-created tickets by their internal subject (e.g. "ESCALATED: Delayed order (HIGH)"). Customer emails avoid this; the portal doesn't.
+- `agents/tools/order_tools.py::get_order` returns the expected delivery date under the key `expected_salary` — that's what the delayed-order agent sees.
+- When `tool_node` hits `MAX_TOOL_ITERATIONS` it returns `requires_human: True`, but nothing downstream reads it — hitting the cap doesn't force escalation.
+- The simulator's `/admin/demo/*` endpoints create real orders/customers/tickets and exist in every environment (key-gated + rate-limited, no off switch).
 - The AI usage monitor's cost estimates (`pricing.py`, `GET /admin/usage`) use a hardcoded `$/token` table that isn't kept in sync with Groq's actual pricing page, and cost is computed at read time from *current* rates, not the rate that was live when a given run actually happened — fine for a rough efficiency signal, not for real billing/reconciliation. Unpriced models return `cost_usd: null` (surfaced as `cost_incomplete: true`) rather than a silently wrong `$0`.
 
 
