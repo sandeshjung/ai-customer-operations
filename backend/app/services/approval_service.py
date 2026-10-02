@@ -125,6 +125,7 @@ def approve(
             order_id=approval.order_id,
             customer_id=approval.customer_id,
             decision=decision,
+            task_id=approval.event_id,
         )
 
     db.commit()

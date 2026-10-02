@@ -182,3 +182,23 @@ class TestProcessTicket:
         assert execution.total_tokens == 165
         assert execution.llm_call_count == 1
         assert execution.duration_ms is not None
+
+
+def test_persists_task_id_and_defaults_it_to_event_id(db_session):
+    from app.models.agent_execution import AgentExecution
+
+    for event_id, task_id in (("evt-a", "evt-root"), ("evt-b", None)):
+        ticket = _make_ticket(db_session, priority=TicketPriority.LOW)
+        with (
+            patch.dict(sys.modules, {"app.rag.service": _stub_rag_service()}),
+            patch.object(triage_service, "triage_graph") as mock_graph,
+        ):
+            mock_graph.invoke.return_value = {"decision": _fake_decision()}
+            triage_service.process_ticket(
+                db=db_session, ticket_id=ticket.id, event_id=event_id, task_id=task_id
+            )
+
+    rows = {r.event_id: r for r in db_session.query(AgentExecution).all()}
+    assert rows["evt-a"].task_id == "evt-root"
+    # A customer-filed ticket is its own task.
+    assert rows["evt-b"].task_id == "evt-b"

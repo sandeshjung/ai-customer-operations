@@ -14,6 +14,8 @@ def _make_execution(db_session, **overrides) -> AgentExecution:
         total_tokens=overrides.pop("total_tokens", 150),
         llm_call_count=overrides.pop("llm_call_count", 1),
         duration_ms=overrides.pop("duration_ms", 500),
+        task_id=overrides.pop("task_id", None),
+        order_id=overrides.pop("order_id", None),
     )
     db_session.add(execution)
     db_session.commit()
@@ -100,3 +102,72 @@ def test_get_usage_flags_cost_incomplete_for_unknown_model(db_session):
     assert result["summary"]["cost_incomplete"] is True
     assert result["by_agent"][0]["cost_usd"] is None
     assert result["recent"][0]["cost_usd"] is None
+
+
+def test_get_usage_groups_runs_into_tasks(db_session):
+    # Delayed order -> agent-created ticket -> triage: one task.
+    _make_execution(
+        db_session,
+        agent_name="delayed_order_agent",
+        event_id="evt-order",
+        task_id="evt-order",
+        order_id=10,
+        input_data={"order_id": 10},
+        input_tokens=1000,
+        output_tokens=200,
+        total_tokens=1200,
+        llm_call_count=5,
+    )
+    _make_execution(
+        db_session,
+        agent_name="triage_agent",
+        event_id="evt-ticket",
+        task_id="evt-order",
+        order_id=10,
+        input_data={"ticket_id": 3},
+        input_tokens=300,
+        output_tokens=100,
+        total_tokens=400,
+        llm_call_count=1,
+    )
+    # Customer-filed ticket: its own task.
+    _make_execution(
+        db_session,
+        agent_name="triage_agent",
+        event_id="evt-complaint",
+        task_id="evt-complaint",
+        order_id=10,
+        input_data={"ticket_id": 4},
+    )
+    # Pre-task_id row: falls back to its own event_id.
+    _make_execution(db_session, event_id="evt-legacy", task_id=None)
+
+    tasks = {t["task_id"]: t for t in get_usage(db=db_session)["tasks"]}
+
+    assert set(tasks) == {"evt-order", "evt-complaint", "evt-legacy"}
+
+    order_task = tasks["evt-order"]
+    assert order_task["kind"] == "delayed_order"
+    assert order_task["order_id"] == 10
+    assert order_task["agents"] == ["delayed_order_agent", "triage_agent"]
+    assert order_task["total_tokens"] == 1600
+    assert order_task["llm_call_count"] == 6
+    assert [r["agent_name"] for r in order_task["runs"]] == [
+        "delayed_order_agent",
+        "triage_agent",
+    ]
+
+    complaint = tasks["evt-complaint"]
+    assert complaint["kind"] == "customer_ticket"
+    assert complaint["ticket_id"] == 4
+    assert complaint["agents"] == ["triage_agent"]
+
+
+def test_task_cost_flags_unpriced_runs(db_session):
+    _make_execution(db_session, task_id="t1", model="llama-3.1-8b-instant")
+    _make_execution(db_session, task_id="t1", event_id="evt-2", model="unpriced-model")
+
+    task = get_usage(db=db_session)["tasks"][0]
+
+    assert task["cost_usd"] is not None  # the priced run still counts
+    assert task["cost_incomplete"] is True

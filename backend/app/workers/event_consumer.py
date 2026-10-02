@@ -98,6 +98,7 @@ def process_event(event: dict) -> None:
                         order_id=data["order_id"],
                         customer_id=customer_id,
                         decision=decision,
+                        task_id=event["event_id"],
                     )
                     logger.info(
                         "Decision executed automatically",
@@ -114,6 +115,9 @@ def process_event(event: dict) -> None:
                     db=db,
                     ticket_id=data["ticket_id"],
                     event_id=event["event_id"],
+                    # Set when the ticket came out of a delayed-order run;
+                    # absent for customer-filed tickets, which are their own task.
+                    task_id=data.get("task_id") or event["event_id"],
                 )
     finally:
         db.close()

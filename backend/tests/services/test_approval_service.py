@@ -121,6 +121,8 @@ class TestApprove:
         assert call_kwargs["order_id"] == approval.order_id
         assert call_kwargs["customer_id"] == approval.customer_id
         assert call_kwargs["decision"].severity == "HIGH"
+        # The approval's event_id is the ORDER_DELAYED that started the task.
+        assert call_kwargs["task_id"] == approval.event_id
 
     def test_raises_if_not_found(self, db_session):
         with pytest.raises(ValueError, match="not found"):

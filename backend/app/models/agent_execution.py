@@ -14,6 +14,12 @@ class AgentExecution(Base):
 
     event_id: Mapped[str] = mapped_column(String(100), nullable=False)
 
+    # The unit of work this run belongs to, for per-task usage: the event_id
+    # of the ORDER_DELAYED (or customer TICKET_CREATED) that started it. A
+    # triage run on a ticket the delayed-order agent created shares its
+    # task_id. Null on rows written before this column existed.
+    task_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+
     # The order this run was about — set for both agents (triage via the
     # ticket's order_id), so an order's full agent history is one indexed
     # query instead of a scan over input_data JSON. Nullable: older rows and

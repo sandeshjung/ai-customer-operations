@@ -21,7 +21,11 @@ def execute_decision(
     order_id: int,
     customer_id: int,
     decision: AgentDecision,
+    task_id: str | None = None,
 ) -> dict:
+    """task_id: the event_id of the ORDER_DELAYED that started this work.
+    Forwarded on TICKET_CREATED so the triage run is attributed to the same
+    task in the AI usage monitor."""
     actions = []
     ticket = None
 
@@ -106,6 +110,7 @@ def execute_decision(
                     "subject": ticket.subject,
                     "message": ticket.message,
                     "priority": ticket.priority,
+                    "task_id": task_id,
                 },
                 trace_context=inject_trace_context(),
             )

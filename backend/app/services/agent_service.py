@@ -107,6 +107,7 @@ def investigate_delayed_order(db, order_id: int, delay_days: int, event_id: str)
     execution = AgentExecution(
         agent_name="delayed_order_agent",
         event_id=event_id,
+        task_id=event_id,
         order_id=order_id,
         input_data={"order_id": order_id, "delay_days": delay_days},
         decision=decision.model_dump(),

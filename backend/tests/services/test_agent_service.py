@@ -109,6 +109,7 @@ def test_persists_order_id_and_tool_steps(db_session):
 
     execution = db_session.query(AgentExecution).filter_by(event_id="evt-steps").one()
     assert execution.order_id == 7
+    assert execution.task_id == "evt-steps"
     assert execution.steps == [
         {"tool": "get_order", "args": {"order_id": 7}, "result": '{"id": 7}'},
         {

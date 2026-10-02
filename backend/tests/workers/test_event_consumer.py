@@ -109,7 +109,11 @@ class TestOrderDelayedAutoExecute:
             event_consumer.process_event(_order_delayed_event(order_id))
 
         mock_execute.assert_called_once_with(
-            db=db_session, order_id=order_id, customer_id=customer_id, decision=decision
+            db=db_session,
+            order_id=order_id,
+            customer_id=customer_id,
+            decision=decision,
+            task_id="evt-1",
         )
         mock_create_approval.assert_not_called()
 
@@ -141,8 +145,20 @@ class TestTicketCreated:
             event_consumer.process_event(_ticket_created_event(ticket_id=77))
 
         mock_process_ticket.assert_called_once_with(
-            db=db_session, ticket_id=77, event_id="evt-2"
+            db=db_session, ticket_id=77, event_id="evt-2", task_id="evt-2"
         )
+
+    def test_forwards_task_id_from_agent_created_ticket(self, db_session):
+        """A ticket the delayed-order agent created carries the ORDER_DELAYED
+        event_id as task_id, so both runs count as one task in AI usage."""
+        with patch.object(event_consumer, "process_ticket") as mock_process_ticket:
+            event_consumer.process_event(
+                _ticket_created_event(
+                    ticket_id=77, data={"ticket_id": 77, "task_id": "evt-root"}
+                )
+            )
+
+        assert mock_process_ticket.call_args.kwargs["task_id"] == "evt-root"
 
 
 class TestSessionCleanup:

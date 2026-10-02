@@ -36,6 +36,23 @@ def _decision(**overrides) -> AgentDecision:
     return AgentDecision(**fields)
 
 
+def test_forwards_task_id_on_ticket_created_event(db_session):
+    customer, order = _make_customer_and_order(db_session)
+
+    with patch.object(action_service, "publish_event") as mock_publish:
+        action_service.execute_decision(
+            db=db_session,
+            order_id=order.id,
+            customer_id=customer.id,
+            decision=_decision(resolution="CONTACT_CUSTOMER", severity="MEDIUM"),
+            task_id="evt-root",
+        )
+
+    event = mock_publish.call_args.args[0]
+    assert event.event_type == "TICKET_CREATED"
+    assert event.data["task_id"] == "evt-root"
+
+
 class TestExecuteDecisionEscalate:
     def test_creates_ticket_and_publishes_event(self, db_session):
         customer, order = _make_customer_and_order(db_session)

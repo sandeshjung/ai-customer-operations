@@ -11,7 +11,7 @@ from app.models.support_ticket import SupportTicket, TicketStatus
 logger = get_logger(__name__)
 
 
-def process_ticket(db, ticket_id: int, event_id: str):
+def process_ticket(db, ticket_id: int, event_id: str, task_id: str | None = None):
     from app.agents.tools.ticket_tools import get_customer_tickets, get_ticket
     from app.rag.service import retrieve_policy
 
@@ -60,6 +60,7 @@ def process_ticket(db, ticket_id: int, event_id: str):
             AgentExecution(
                 agent_name="triage_agent",
                 event_id=event_id,
+                task_id=task_id or event_id,
                 order_id=ticket.get("order_id"),
                 input_data={"ticket_id": ticket_id},
                 decision=decision.model_dump(),

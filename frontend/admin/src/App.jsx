@@ -23,7 +23,7 @@ const PAGES = [
   { id: "simulate", label: "Simulate", sub: "Send a demo order or complaint through the agents" },
   { id: "tickets", label: "Support tickets", sub: "Every ticket, agent- or customer-created" },
   { id: "notifications", label: "Notifications", sub: "Customer notifications the agents sent" },
-  { id: "usage", label: "AI usage", sub: "Token usage and estimated cost per agent run" },
+  { id: "usage", label: "AI usage", sub: "Token usage and estimated cost per task, and the agents each one used" },
 ];
 
 function pageFromHash() {
