@@ -28,13 +28,9 @@ async function request(path) {
 }
 
 export const api = {
-  // NOTE: this is a guest-lookup pattern (order ID + the email on the
-  // order), not real authentication — there's no customer login/session
-  // system. It's only meant to stop someone from casually browsing other
-  // customers' orders by guessing IDs, same as most e-commerce "track your
-  // order" pages.
-  lookupOrder: (orderId, email) =>
-    request(`/portal/orders/${encodeURIComponent(orderId)}?email=${encodeURIComponent(email)}`),
+  // NOTE: public lookup by order number alone — no authentication. See the
+  // comment in backend/app/api/customer_portal.py for the trade-off.
+  lookupOrder: (orderId) => request(`/portal/orders/${encodeURIComponent(orderId)}`),
   ticketsForCustomer: (customerId) => request(`/tickets?customer_id=${encodeURIComponent(customerId)}`),
 };
 

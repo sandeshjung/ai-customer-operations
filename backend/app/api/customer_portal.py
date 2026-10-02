@@ -5,19 +5,19 @@ from app.core.database import get_db
 from app.core.security import rate_limit
 from app.models.order import OrderStatus
 from app.schemas.customer_portal import CustomerOrderLookupResponse, ShipmentInfo
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/portal", tags=["Customer Portal"])
 
-# NOTE: this is a guest-lookup pattern, not real authentication. There is no
-# customer login/session system in this codebase. Matching order_id + email
-# only keeps someone from casually browsing other customers' orders by
-# guessing IDs — it is not a substitute for real access control. Whether the
-# lookup fails because the order doesn't exist or because the email doesn't
-# match, we return the same generic error so a caller can't use the response
-# to enumerate valid order IDs.
-_NOT_FOUND_DETAIL = "We couldn't find an order with that ID and email."
+# NOTE: this is a public lookup by order number alone — no authentication and
+# no second factor. There is no customer login/session system, and order IDs
+# are sequential, so anyone can read any order's items, shipment and tracking
+# number by trying numbers; the per-IP rate limit only slows that down. This
+# is a deliberate demo-friendliness trade-off on synthetic data. A real
+# deployment would need a second factor (e.g. the email on the order) or
+# unguessable order references.
+_NOT_FOUND_DETAIL = "We couldn't find an order with that number."
 
 
 @router.get(
@@ -29,16 +29,12 @@ _NOT_FOUND_DETAIL = "We couldn't find an order with that ID and email."
 )
 def lookup_order(
     order_id: int,
-    email: str = Query(...),
     db: Session = Depends(get_db),
 ):
     try:
         order = get_order(order_id, db)
     except HTTPException:
         raise HTTPException(status_code=404, detail=_NOT_FOUND_DETAIL) from None
-
-    if order.customer.email.strip().lower() != email.strip().lower():
-        raise HTTPException(status_code=404, detail=_NOT_FOUND_DETAIL)
 
     today = datetime.now(UTC).date()
     is_delayed = False

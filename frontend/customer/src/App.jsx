@@ -4,7 +4,7 @@ import { LookupForm } from "./components/LookupForm";
 import { OrderDetails } from "./components/OrderDetails";
 import { TicketsList } from "./components/TicketsList";
 
-const GENERIC_ERROR = "We couldn't find an order with that ID and email. Double-check both and try again.";
+const GENERIC_ERROR = "We couldn't find an order with that number. Double-check it and try again.";
 
 export default function App() {
   const [status, setStatus] = useState("idle"); // idle | loading | ready | error
@@ -14,12 +14,12 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [apiBaseValue, setApiBaseValue] = useState(getApiBase());
 
-  async function handleLookup(orderId, email) {
+  async function handleLookup(orderId) {
     setStatus("loading");
     setErrorMessage("");
 
     try {
-      const foundOrder = await api.lookupOrder(orderId, email);
+      const foundOrder = await api.lookupOrder(orderId);
       setOrder(foundOrder);
 
       try {
@@ -54,7 +54,7 @@ export default function App() {
     <div className="page">
       <header className="hero">
         <h1>Track your order</h1>
-        <p>Enter your order number and the email you used to place it.</p>
+        <p>Enter your order number to see where it is.</p>
       </header>
 
       <main className="content">
