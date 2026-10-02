@@ -53,7 +53,7 @@ header.top {
   gap: 24px;
   padding-bottom: 22px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 32px;
+  margin-bottom: 0;
   flex-wrap: wrap;
 }
 
@@ -652,10 +652,12 @@ td.subject {
   }
   .conn {
     width: 100%;
+    flex-wrap: wrap;
   }
   .conn input {
-    flex: 1;
+    flex: 1 1 140px;
     width: auto;
+    min-width: 0;
   }
   .search-input {
     width: 100%;
@@ -1064,6 +1066,47 @@ textarea.sim-input {
 .tl-quote strong {
   color: var(--text);
   font-weight: 500;
+}
+
+/* Page nav ------------------------------------------------------------- */
+
+.page-nav {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 32px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.page-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 12px 11px;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.page-link:hover {
+  color: var(--text);
+}
+.page-link.active {
+  color: var(--text);
+  border-bottom-color: var(--teal);
+}
+
+.nav-count {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 9px;
+  color: #0c1315;
+  background: var(--amber);
 }
 
 .sim-form .sim-email {
