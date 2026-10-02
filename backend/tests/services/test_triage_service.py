@@ -202,3 +202,31 @@ def test_persists_task_id_and_defaults_it_to_event_id(db_session):
     assert rows["evt-a"].task_id == "evt-root"
     # A customer-filed ticket is its own task.
     assert rows["evt-b"].task_id == "evt-b"
+
+
+def test_sends_templated_status_update_after_triage(db_session):
+    from app.models.notification import Notification
+
+    ticket = _make_ticket(db_session, priority=TicketPriority.LOW)
+    decision = _fake_decision(
+        action="RESOLVE",
+        requires_human=False,
+        reasoning="INTERNAL: customer seems difficult",
+    )
+
+    with (
+        patch.dict(sys.modules, {"app.rag.service": _stub_rag_service()}),
+        patch.object(triage_service, "triage_graph") as mock_graph,
+    ):
+        mock_graph.invoke.return_value = {"decision": decision}
+        triage_service.process_ticket(
+            db=db_session, ticket_id=ticket.id, event_id="evt-mail"
+        )
+
+    notification = (
+        db_session.query(Notification).filter_by(customer_id=ticket.customer_id).one()
+    )
+    assert "resolved" in notification.subject
+    assert f"#{ticket.id}" in notification.subject
+    # Triage's reasoning is internal — never sent to the customer.
+    assert "INTERNAL" not in notification.content

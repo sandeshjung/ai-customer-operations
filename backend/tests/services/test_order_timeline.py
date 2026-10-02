@@ -384,3 +384,28 @@ def test_dead_letters_without_order_id_dont_match_orderless_events():
     )
     with patch.object(order_timeline, "redis_client", fake):
         assert order_timeline._dead_letters_for(None, "evt-mine") == {}
+
+
+def test_ticket_timeline_lists_customer_emails(db_session, redis_state):
+    from app.models.notification import Notification
+
+    ticket = _make_ticket(db_session, _make_order(db_session))
+    db_session.add(
+        Notification(
+            customer_id=ticket.customer_id,
+            order_id=ticket.order_id,
+            channel="EMAIL",
+            recipient="c@example.com",
+            subject=f"We've received your request (ticket #{ticket.id})",
+            content="ack",
+            status="SENT",
+        )
+    )
+    db_session.commit()
+
+    stage = _stages(order_timeline.build_ticket_timeline(db_session, ticket.id))[
+        "notifications"
+    ]
+
+    assert stage["status"] == "done"
+    assert stage["detail"]["notifications"][0]["subject"].startswith("We've received")

@@ -8,7 +8,12 @@ from app.events.publisher import publish_event
 from app.events.schemas import Event
 from app.events.types import EventType
 from app.models.support_ticket import SupportTicket, TicketPriority, TicketStatus
-from app.services.notification_service import send_notification
+from app.services.customer_emails import (
+    customer_first_name,
+    order_update,
+    send_customer_email,
+    ticket_acknowledgement,
+)
 from sqlalchemy.orm import Session
 
 logger = get_logger(__name__)
@@ -126,14 +131,30 @@ def execute_decision(
             },
         )
 
+    # Customer-facing tickets (the ones that go to triage) get acknowledged to
+    # the customer. Internal follow-ups (track shipment, contact carrier) don't
+    # — the customer never asked for anything. When the agent also drafted a
+    # message, the acknowledgement rides along in that one email.
+    customer_facing_ticket = (
+        ticket if decision.resolution in _TRIAGE_WORTHY_RESOLUTIONS else None
+    )
+    email = None
     if decision.customer_message:
-        notification = send_notification(
-            db=db,
-            customer_id=customer_id,
-            order_id=order_id,
-            subject="An update on your order",
-            content=decision.customer_message,
+        email = order_update(
+            decision.customer_message,
+            order_id,
+            customer_facing_ticket.id if customer_facing_ticket else None,
         )
+    elif customer_facing_ticket is not None:
+        email = ticket_acknowledgement(
+            customer_first_name(db, customer_id),
+            customer_facing_ticket.id,
+            order_id,
+            about=f"the delay on your order #{order_id}",
+        )
+
+    if email is not None:
+        notification = send_customer_email(db, customer_id, order_id, email)
         actions.append(
             "customer_notified"
             if notification.status == "SENT"

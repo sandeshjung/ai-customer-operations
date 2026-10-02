@@ -7,6 +7,11 @@ from app.core.logging import get_logger
 from app.core.tracing import traced
 from app.models.agent_execution import AgentExecution
 from app.models.support_ticket import SupportTicket, TicketStatus
+from app.services.customer_emails import (
+    customer_first_name,
+    send_customer_email,
+    triage_update,
+)
 
 logger = get_logger(__name__)
 
@@ -110,6 +115,22 @@ def process_ticket(db, ticket_id: int, event_id: str, task_id: str | None = None
                 db_ticket.status = TicketStatus.RESOLVED
 
         db.commit()
+
+        # Tell the customer what happens next. Templated per outcome — the
+        # triage reasoning/priority are internal and never sent.
+        if db_ticket:
+            send_customer_email(
+                db,
+                ticket["customer_id"],
+                ticket.get("order_id"),
+                triage_update(
+                    customer_first_name(db, ticket["customer_id"]),
+                    ticket_id,
+                    ticket.get("order_id"),
+                    action=decision.action,
+                    resolved=db_ticket.status == TicketStatus.RESOLVED,
+                ),
+            )
 
     logger.info(
         "Ticket triage completed",

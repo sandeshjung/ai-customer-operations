@@ -313,6 +313,30 @@ def build_ticket_timeline(
         )
         state = "in_progress"
 
+    # Emails to the customer about this ticket: the acknowledgement on filing,
+    # then triage's status update.
+    notifications = (
+        db.query(Notification)
+        .filter(
+            Notification.customer_id == ticket.customer_id,
+            Notification.order_id == ticket.order_id,
+            Notification.created_at >= ticket.created_at,
+        )
+        .order_by(Notification.created_at)
+        .all()
+        if ticket.order_id is not None
+        else []
+    )
+    stages.append(
+        _stage(
+            "notifications",
+            "Customer emails",
+            DONE if notifications else PENDING,
+            notifications[-1].created_at if notifications else None,
+            {"notifications": [_notification_detail(n) for n in notifications]},
+        )
+    )
+
     return {
         "ticket": _ticket_detail(ticket) | {"order_id": ticket.order_id},
         "event_id": event_id,

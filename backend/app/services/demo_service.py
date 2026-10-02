@@ -23,6 +23,11 @@ from app.models.order_item import OrderItem
 from app.models.product import Product
 from app.models.shipment import Shipment, ShipmentStatus
 from app.models.support_ticket import SupportTicket, TicketPriority, TicketStatus
+from app.services.customer_emails import (
+    customer_first_name,
+    send_customer_email,
+    ticket_acknowledgement,
+)
 from app.services.order_monitor import delayed_order_dedupe_key
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -228,6 +233,18 @@ def create_customer_ticket(
         },
     )
     message_id = publish_event(event)
+
+    send_customer_email(
+        db,
+        order.customer_id,
+        order.id,
+        ticket_acknowledgement(
+            customer_first_name(db, order.customer_id),
+            ticket.id,
+            order.id,
+            about=f"your order #{order.id}: “{subject}”",
+        ),
+    )
 
     logger.info(
         "Demo customer ticket created",

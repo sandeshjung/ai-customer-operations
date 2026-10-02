@@ -545,7 +545,7 @@ function StageDetail({ stage, run, onReview }) {
     }
   }
 
-  if (key === "actions" && status === "done") {
+  if ((key === "actions" || key === "notifications") && status === "done") {
     const { tickets = [], notifications = [] } = detail;
     if (!tickets.length && !notifications.length) {
       return <div className="tl-note">{detail.resolution}: nothing to create.</div>;

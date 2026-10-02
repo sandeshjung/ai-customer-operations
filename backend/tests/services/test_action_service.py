@@ -273,3 +273,65 @@ class TestCustomerNotification:
         )
         assert notification.status == "FAILED"
         assert notification.error == "smtp down"
+
+
+class TestTicketAcknowledgement:
+    """Customer-facing tickets (ESCALATE / CONTACT_CUSTOMER) are acknowledged
+    to the customer with a link to the order's status; internal follow-ups
+    aren't."""
+
+    def test_escalation_ticket_is_acknowledged(self, db_session):
+        customer, order = _make_customer_and_order(db_session)
+
+        with patch.object(action_service, "publish_event"):
+            result = action_service.execute_decision(
+                db=db_session,
+                order_id=order.id,
+                customer_id=customer.id,
+                decision=_decision(resolution="ESCALATE", customer_message=None),
+            )
+
+        notification = (
+            db_session.query(Notification).filter_by(customer_id=customer.id).one()
+        )
+        assert f"#{result['ticket_id']}" in notification.subject
+        assert f"?order={order.id}" in notification.content
+        assert "ESCALATED" not in notification.content  # internal subject
+        assert "customer_notified" in result["actions"]
+
+    def test_drafted_message_and_acknowledgement_are_one_email(self, db_session):
+        customer, order = _make_customer_and_order(db_session)
+
+        with patch.object(action_service, "publish_event"):
+            result = action_service.execute_decision(
+                db=db_session,
+                order_id=order.id,
+                customer_id=customer.id,
+                decision=_decision(
+                    resolution="CONTACT_CUSTOMER",
+                    severity="MEDIUM",
+                    customer_message="Sorry for the wait.",
+                ),
+            )
+
+        notification = (
+            db_session.query(Notification).filter_by(customer_id=customer.id).one()
+        )
+        assert notification.content.startswith("Sorry for the wait.")
+        assert f"ticket #{result['ticket_id']}" in notification.content
+
+    def test_internal_follow_up_ticket_is_not_acknowledged(self, db_session):
+        customer, order = _make_customer_and_order(db_session)
+
+        with patch.object(action_service, "publish_event"):
+            action_service.execute_decision(
+                db=db_session,
+                order_id=order.id,
+                customer_id=customer.id,
+                decision=_decision(resolution="TRACK_SHIPMENT", customer_message=None),
+            )
+
+        assert (
+            db_session.query(Notification).filter_by(customer_id=customer.id).count()
+            == 0
+        )

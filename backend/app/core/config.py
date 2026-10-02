@@ -40,14 +40,21 @@ class Settings(BaseSettings):
 
     NOTIFICATION_BACKEND: str = "log"
 
-    # Only needed if you uncomment the Mailjet demo call in
-    # notification_service.send_notification() — see that file.
+    # Real email delivery via Mailjet, on top of NOTIFICATION_BACKEND — see
+    # notification_service.send_notification(). Off by default: when on, every
+    # customer notification (delayed-order updates, ticket acknowledgements,
+    # triage status updates) is emailed to the customer's real address.
+    MAILJET_DEMO_ENABLED: bool = False
     MAILJET_API_KEY: str | None = None
     MAILJET_API_SECRET: str | None = None
     MAILJET_SENDER_EMAIL: str | None = None
     MAILJET_SENDER_NAME: str = "Customer Support"
 
     ADMIN_API_KEY: str | None = None
+
+    # Base URL of the customer portal ("Track your order"). Customer emails
+    # link to {CUSTOMER_PORTAL_URL}/?order=<id>, which opens that order.
+    CUSTOMER_PORTAL_URL: str = "http://localhost:8081"
 
     RATE_LIMIT_ENABLED: bool = True
 

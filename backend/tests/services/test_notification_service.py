@@ -173,3 +173,46 @@ class TestMailjetDemoBackend:
             notification_service._demo_send_via_mailjet(
                 "customer@example.com", "Subject", "Body"
             )  # must not raise
+
+
+class TestMailjetDemoSwitch:
+    def test_sends_real_email_with_html_when_enabled(self, db_session, monkeypatch):
+        monkeypatch.setattr(notification_service.settings, "MAILJET_DEMO_ENABLED", True)
+        customer = _make_customer(db_session)
+
+        with patch.object(notification_service, "_demo_send_via_mailjet") as mock_send:
+            notification_service.send_notification(
+                db=db_session,
+                customer_id=customer.id,
+                content="text",
+                subject="s",
+                html="<p>html</p>",
+            )
+
+        mock_send.assert_called_once_with(customer.email, "s", "text", "<p>html</p>")
+
+    def test_no_real_email_when_disabled(self, db_session, monkeypatch):
+        monkeypatch.setattr(
+            notification_service.settings, "MAILJET_DEMO_ENABLED", False
+        )
+        customer = _make_customer(db_session)
+
+        with patch.object(notification_service, "_demo_send_via_mailjet") as mock_send:
+            notification_service.send_notification(
+                db=db_session, customer_id=customer.id, content="text"
+            )
+
+        mock_send.assert_not_called()
+
+    def test_mailjet_payload_includes_html_part(self):
+        response = Mock(status_code=200, raise_for_status=Mock())
+        with patch.object(
+            notification_service.httpx, "post", return_value=response
+        ) as mock_post:
+            notification_service._send_via_mailjet(
+                "c@example.com", "s", "text", "<p>html</p>"
+            )
+
+        message = mock_post.call_args.kwargs["json"]["Messages"][0]
+        assert message["TextPart"] == "text"
+        assert message["HTMLPart"] == "<p>html</p>"

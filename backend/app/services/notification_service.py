@@ -18,39 +18,42 @@ def _send_via_log(recipient: str, subject: str | None, content: str) -> None:
     )
 
 
-def _send_via_mailjet(recipient: str, subject: str | None, content: str) -> None:
+def _send_via_mailjet(
+    recipient: str, subject: str | None, content: str, html: str | None = None
+) -> None:
     """Real delivery via Mailjet's Send API v3.1. Requires MAILJET_API_KEY,
     MAILJET_API_SECRET, and MAILJET_SENDER_EMAIL (see config.py / .env.example).
-    Not wired into the default flow — see the commented call site below."""
+    Only called when MAILJET_DEMO_ENABLED is on — see send_notification()."""
+    message = {
+        "From": {
+            "Email": settings.MAILJET_SENDER_EMAIL,
+            "Name": settings.MAILJET_SENDER_NAME,
+        },
+        "To": [{"Email": recipient}],
+        "Subject": subject or "An update on your order",
+        "TextPart": content,
+    }
+    if html:
+        message["HTMLPart"] = html
     response = httpx.post(
         "https://api.mailjet.com/v3.1/send",
         auth=(settings.MAILJET_API_KEY, settings.MAILJET_API_SECRET),
-        json={
-            "Messages": [
-                {
-                    "From": {
-                        "Email": settings.MAILJET_SENDER_EMAIL,
-                        "Name": settings.MAILJET_SENDER_NAME,
-                    },
-                    "To": [{"Email": recipient}],
-                    "Subject": subject or "An update on your order",
-                    "TextPart": content,
-                }
-            ]
-        },
+        json={"Messages": [message]},
         timeout=10,
     )
     response.raise_for_status()
 
 
-def _demo_send_via_mailjet(recipient: str, subject: str | None, content: str) -> None:
+def _demo_send_via_mailjet(
+    recipient: str, subject: str | None, content: str, html: str | None = None
+) -> None:
     """Best-effort wrapper around _send_via_mailjet for the demo call site in
     send_notification() — swallows and logs any failure (bad/missing
     credentials, network error, etc.) so toggling the demo on never risks
     the primary notification flow, unlike the real _BACKENDS entries above,
     which report failure back to the caller by design."""
     try:
-        _send_via_mailjet(recipient, subject, content)
+        _send_via_mailjet(recipient, subject, content, html)
         logger.info("Mailjet demo send succeeded", extra={"recipient": recipient})
     except Exception as exc:  # noqa: BLE001 - demo-only real send, must never affect the primary notification flow
         logger.warning("Mailjet demo send failed", extra={"error": str(exc)})
@@ -66,7 +69,13 @@ def send_notification(
     order_id: int | None = None,
     subject: str | None = None,
     channel: str = NotificationChannel.EMAIL,
+    html: str | None = None,
 ) -> Notification:
+    """Records a Notification and delivers it via NOTIFICATION_BACKEND.
+
+    html: optional HTML version of `content` (e.g. with a "View status"
+    button). Only used for real email delivery; `content` is what's stored.
+    """
 
     customer = db.get(Customer, customer_id)
     if customer is None:
@@ -107,13 +116,13 @@ def send_notification(
         status = NotificationStatus.FAILED
         error = str(exc)
 
-    # DEMO: uncomment the line below to also send a real email via Mailjet
+    # DEMO: also send a real email via Mailjet when MAILJET_DEMO_ENABLED=true
     # (needs MAILJET_API_KEY / MAILJET_API_SECRET / MAILJET_SENDER_EMAIL in
     # .env). Runs independently of the backend above — never changes the
     # recorded status below, so the admin console keeps showing every
     # notification exactly as it does today either way.
-
-    # _demo_send_via_mailjet(recipient, subject, content)
+    if settings.MAILJET_DEMO_ENABLED:
+        _demo_send_via_mailjet(recipient, subject, content, html)
 
     notification = Notification(
         customer_id=customer_id,

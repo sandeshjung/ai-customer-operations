@@ -237,3 +237,20 @@ def test_complaint_unknown_email_raises(db_session, published):
         demo_service.create_customer_ticket(
             db_session, subject="s", message="m", customer_email="nobody@example.com"
         )
+
+
+def test_customer_ticket_is_acknowledged_with_status_link(db_session, published):
+    from app.models.notification import Notification
+
+    customer = _seed(db_session)
+    order = _make_order(db_session, customer)
+
+    result = demo_service.create_customer_ticket(
+        db_session, subject="Wrong colour", message="m", order_id=order.id
+    )
+
+    notification = db_session.query(Notification).filter_by(order_id=order.id).one()
+    assert notification.recipient == customer.email
+    assert f"#{result['ticket_id']}" in notification.subject
+    assert "Wrong colour" in notification.content
+    assert f"?order={order.id}" in notification.content

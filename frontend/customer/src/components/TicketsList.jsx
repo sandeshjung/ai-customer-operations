@@ -22,7 +22,9 @@ export function TicketsList({ tickets }) {
                 {formatTicketStatus(ticket.status)}
               </span>
             </div>
-            <div className="muted small">Opened {formatDate(ticket.created_at)}</div>
+            <div className="muted small">
+              Ticket #{ticket.id} · Opened {formatDate(ticket.created_at)}
+            </div>
           </li>
         ))}
       </ul>

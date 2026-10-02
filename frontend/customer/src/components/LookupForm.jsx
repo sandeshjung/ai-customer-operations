@@ -1,7 +1,7 @@
 import { useState } from "react";
 
-export function LookupForm({ onSubmit, submitting }) {
-  const [orderId, setOrderId] = useState("");
+export function LookupForm({ onSubmit, submitting, initialOrderId = "" }) {
+  const [orderId, setOrderId] = useState(initialOrderId);
 
   function handleSubmit(e) {
     e.preventDefault();

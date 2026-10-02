@@ -1,10 +1,23 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, getApiBase, setApiBase } from "./api";
 import { LookupForm } from "./components/LookupForm";
 import { OrderDetails } from "./components/OrderDetails";
 import { TicketsList } from "./components/TicketsList";
 
 const GENERIC_ERROR = "We couldn't find an order with that number. Double-check it and try again.";
+
+// "View status" links in customer emails open /?order=<id>.
+function orderFromUrl() {
+  const id = new URLSearchParams(window.location.search).get("order");
+  return id && /^\d+$/.test(id) ? id : "";
+}
+
+function setOrderInUrl(orderId) {
+  const url = new URL(window.location.href);
+  if (orderId) url.searchParams.set("order", orderId);
+  else url.searchParams.delete("order");
+  window.history.replaceState(null, "", url);
+}
 
 export default function App() {
   const [status, setStatus] = useState("idle"); // idle | loading | ready | error
@@ -14,9 +27,12 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [apiBaseValue, setApiBaseValue] = useState(getApiBase());
 
+  const initialOrderId = useRef(orderFromUrl()).current;
+
   async function handleLookup(orderId) {
     setStatus("loading");
     setErrorMessage("");
+    setOrderInUrl(orderId);
 
     try {
       const foundOrder = await api.lookupOrder(orderId);
@@ -38,7 +54,14 @@ export default function App() {
     }
   }
 
+  // Opened from an email link: look the order up straight away.
+  useEffect(() => {
+    if (initialOrderId) handleLookup(initialOrderId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function handleStartOver() {
+    setOrderInUrl("");
     setStatus("idle");
     setOrder(null);
     setTickets([]);
@@ -60,7 +83,11 @@ export default function App() {
       <main className="content">
         {status !== "ready" && (
           <div className="card lookup-card">
-            <LookupForm onSubmit={handleLookup} submitting={status === "loading"} />
+            <LookupForm
+              onSubmit={handleLookup}
+              submitting={status === "loading"}
+              initialOrderId={initialOrderId}
+            />
             {status === "error" && <p className="error-message">{errorMessage}</p>}
           </div>
         )}
