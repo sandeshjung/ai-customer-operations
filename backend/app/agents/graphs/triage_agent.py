@@ -27,6 +27,14 @@ class TriageState(dict):
     policy_context: str
     decision: TriageDecision | None
 
+    # LangGraph only keeps keys declared on the state — without these,
+    # triage_node's usage figures were silently dropped and every triage
+    # AgentExecution recorded 0 tokens (see test_triage_usage.py).
+    llm_input_tokens: int
+    llm_output_tokens: int
+    llm_total_tokens: int
+    llm_call_count: int
+
 
 def triage_node(state: TriageState):
     ticket = state["ticket"]
