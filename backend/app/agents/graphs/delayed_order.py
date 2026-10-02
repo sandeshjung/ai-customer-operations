@@ -5,6 +5,10 @@ import time
 
 from app.agents.guardrails import validate_decision
 from app.agents.models import AgentDecision
+from app.agents.prompts import (
+    DELAYED_ORDER_DECISION_PROMPT,
+    DELAYED_ORDER_SYSTEM_PROMPT,
+)
 from app.agents.state import DelayedOrderState
 from app.core.config import settings
 from app.core.logging import configure_logging
@@ -131,48 +135,6 @@ def _usage_delta(state: DelayedOrderState, usage: dict | None) -> dict:
 
 llms_with_tools = llm.bind_tools(tools)
 
-SYSTEM_PROMPT = """
-You are an AI operations agent responsible for investigating delayed orders.
-
-You are given an order ID and the number of days the order is delayed.
-
-Your job is to investigate the situation.
-
-Use tools when you need additional information.
-
-You should generally investigate:
-
-1. The order.
-2. The shipment.
-3. The customer when customer information is relevant.
-
-Never invent information.
-
-If shipment information is missing, treat that as an important
-operational signal.
-
-After gathering enough information, determine:
-
-- severity
-- recommended resolution
-- whether human intervention is required
-- an optional customer message
-
-You must not perform actions that modify the database.
-
-You are an investigation and recommendation agent only.
-
-When determining an operational resolution, use
-search_shipping_policy to retrieve relevant company policy.
-
-Do not rely on general knowledge for company policies.
-
-If a policy is relevant to the decision, retrieve it
-before making the decision.
-
-Never invent policy rules.
-"""
-
 
 def agent_node(state: DelayedOrderState):
     logger.info(
@@ -193,7 +155,7 @@ def agent_node(state: DelayedOrderState):
         response = llms_with_tools.invoke(
             [
                 SystemMessage(
-                    content=SYSTEM_PROMPT
+                    content=DELAYED_ORDER_SYSTEM_PROMPT
                 ),  # ← tells LLM to investigate using tools
                 *state["messages"],
             ]
@@ -280,36 +242,6 @@ def tool_node(state: DelayedOrderState):
     return {**result, "tool_iterations": current_iterations + 1}
 
 
-DECISION_PROMPT = """
-Based on the investigation above, produce the final operational decision.
-
-If policy documents were retrieved, use them as the source of truth.
-
-Return ONLY valid JSON. Do not use markdown code blocks. Do not add explanations before or after the JSON. The response must start with { and end with }.
-
-{
-  "severity": "LOW | MEDIUM | HIGH | CRITICAL",
-  "resolution": "TRACK_SHIPMENT | CONTACT_CARRIER | CONTACT_CUSTOMER | ESCALATE | NO_ACTION",
-  "reasoning": "short explanation",
-  "customer_message": "message or null",
-  "requires_human": true,
-  "evidence": [
-    {
-      "source": "shipping_policy.pdf",
-      "page": 2,
-      "chunk_index": 1
-    }
-  ]
-}
-
-Rules:
-
-- Never invent policy information.
-- Only include evidence that was actually retrieved.
-- If no policy was retrieved, return an empty evidence list.
-"""
-
-
 def decision_node(state: DelayedOrderState):
     logger.info(
         "Generating final decision | order_id=%s",
@@ -328,7 +260,7 @@ def decision_node(state: DelayedOrderState):
     ) as span:
         response = llms_with_tools.invoke(
             [
-                SystemMessage(content=DECISION_PROMPT),
+                SystemMessage(content=DELAYED_ORDER_DECISION_PROMPT),
                 *state["messages"],
             ]
         )
@@ -357,7 +289,7 @@ def decision_node(state: DelayedOrderState):
     # structured_llm = llm.with_structured_output(AgentDecision)
     # decision = structured_llm.invoke(
     #     [
-    #         SystemMessage(content=DECISION_PROMPT),
+    #         SystemMessage(content=DELAYED_ORDER_DECISION_PROMPT),
     #         *state["messages"],
     #     ]
     # )

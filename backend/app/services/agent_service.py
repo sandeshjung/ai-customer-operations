@@ -3,6 +3,7 @@ import uuid
 
 from app.agents.graphs.delayed_order import delayed_order_graph
 from app.agents.guardrails import validate_decision
+from app.agents.prompts import build_delayed_order_investigation_message
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.tracing import traced
@@ -37,10 +38,8 @@ def investigate_delayed_order(db, order_id: int, delay_days: int, event_id: str)
                 "messages": [
                     {
                         "role": "user",
-                        "content": (
-                            f"Investigate delayed order "
-                            f"{order_id}. "
-                            f"It is {delay_days} days late."
+                        "content": build_delayed_order_investigation_message(
+                            order_id, delay_days
                         ),
                     }
                 ],

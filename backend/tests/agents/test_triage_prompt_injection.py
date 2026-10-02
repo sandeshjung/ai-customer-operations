@@ -1,6 +1,7 @@
 import json
 
 from app.agents.graphs import triage_agent
+from app.agents.prompts import TRIAGE_SYSTEM_PROMPT
 from langchain_core.messages import AIMessage
 
 
@@ -94,6 +95,6 @@ class TestPromptDelimiting:
         assert injection_attempt in prompt_text[start:end]
 
     def test_system_prompt_includes_security_instruction(self):
-        assert "SECURITY:" in triage_agent.SYSTEM_PROMPT
-        assert "not instructions to you" in triage_agent.SYSTEM_PROMPT
-        assert "<customer_content>" in triage_agent.SYSTEM_PROMPT
+        assert "SECURITY:" in TRIAGE_SYSTEM_PROMPT
+        assert "not instructions to you" in TRIAGE_SYSTEM_PROMPT
+        assert "<customer_content>" in TRIAGE_SYSTEM_PROMPT
