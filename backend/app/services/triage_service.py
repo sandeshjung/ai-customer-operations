@@ -60,6 +60,7 @@ def process_ticket(db, ticket_id: int, event_id: str):
             AgentExecution(
                 agent_name="triage_agent",
                 event_id=event_id,
+                order_id=ticket.get("order_id"),
                 input_data={"ticket_id": ticket_id},
                 decision=decision.model_dump(),
                 model=settings.LLM_MODEL,

@@ -11,6 +11,32 @@ from app.models.agent_execution import AgentExecution
 
 logger = get_logger(__name__)
 
+# Tool results can be large (policy chunks) — keep the timeline payload small.
+MAX_STEP_RESULT_CHARS = 1500
+
+
+def extract_tool_steps(messages: list) -> list[dict]:
+    """Pairs each tool call the LLM requested with the result it got back,
+    in call order, from the graph's final message history."""
+    steps: list[dict] = []
+    by_call_id: dict[str, dict] = {}
+
+    for message in messages:
+        for call in getattr(message, "tool_calls", None) or []:
+            step = {"tool": call.get("name"), "args": call.get("args"), "result": None}
+            steps.append(step)
+            if call.get("id"):
+                by_call_id[call["id"]] = step
+
+        call_id = getattr(message, "tool_call_id", None)
+        if call_id and call_id in by_call_id:
+            content = message.content
+            if not isinstance(content, str):
+                content = str(content)
+            by_call_id[call_id]["result"] = content[:MAX_STEP_RESULT_CHARS]
+
+    return steps
+
 
 def investigate_delayed_order(db, order_id: int, delay_days: int, event_id: str):
     execution_id = str(uuid.uuid4())
@@ -81,6 +107,7 @@ def investigate_delayed_order(db, order_id: int, delay_days: int, event_id: str)
     execution = AgentExecution(
         agent_name="delayed_order_agent",
         event_id=event_id,
+        order_id=order_id,
         input_data={"order_id": order_id, "delay_days": delay_days},
         decision=decision.model_dump(),
         model=settings.LLM_MODEL,
@@ -89,6 +116,7 @@ def investigate_delayed_order(db, order_id: int, delay_days: int, event_id: str)
         total_tokens=result.get("llm_total_tokens", 0),
         llm_call_count=result.get("llm_call_count", 0),
         duration_ms=duration_ms,
+        steps=extract_tool_steps(result.get("messages", [])),
     )
 
     db.add(execution)

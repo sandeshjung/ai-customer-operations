@@ -77,3 +77,58 @@ def test_missing_usage_keys_default_to_zero(db_session):
     assert execution.output_tokens == 0
     assert execution.total_tokens == 0
     assert execution.llm_call_count == 0
+
+
+def test_persists_order_id_and_tool_steps(db_session):
+    """The admin console's order timeline reads these — order_id to find the
+    run, steps to show which tools the agent called and what came back."""
+    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+    messages = [
+        HumanMessage(content="Investigate delayed order 7."),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {"name": "get_order", "args": {"order_id": 7}, "id": "c1"},
+                {"name": "get_shipment", "args": {"order_id": 7}, "id": "c2"},
+            ],
+        ),
+        ToolMessage(content='{"status": "LOST"}', tool_call_id="c2"),
+        ToolMessage(content='{"id": 7}', tool_call_id="c1"),
+        AIMessage(content="done"),
+    ]
+
+    with patch.object(agent_service, "delayed_order_graph") as mock_graph:
+        mock_graph.invoke.return_value = {
+            "decision": _make_decision(),
+            "messages": messages,
+        }
+        agent_service.investigate_delayed_order(
+            db=db_session, order_id=7, delay_days=4, event_id="evt-steps"
+        )
+
+    execution = db_session.query(AgentExecution).filter_by(event_id="evt-steps").one()
+    assert execution.order_id == 7
+    assert execution.steps == [
+        {"tool": "get_order", "args": {"order_id": 7}, "result": '{"id": 7}'},
+        {
+            "tool": "get_shipment",
+            "args": {"order_id": 7},
+            "result": '{"status": "LOST"}',
+        },
+    ]
+
+
+def test_extract_tool_steps_truncates_long_results():
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    steps = agent_service.extract_tool_steps(
+        [
+            AIMessage(
+                content="",
+                tool_calls=[{"name": "search_shipping_policy", "args": {}, "id": "c1"}],
+            ),
+            ToolMessage(content="x" * 5000, tool_call_id="c1"),
+        ]
+    )
+    assert len(steps[0]["result"]) == agent_service.MAX_STEP_RESULT_CHARS

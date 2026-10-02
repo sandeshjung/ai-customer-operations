@@ -61,6 +61,14 @@ async function request(path, options = {}) {
   return res.json();
 }
 
+function timelineQuery({ eventId, messageId } = {}) {
+  const params = new URLSearchParams();
+  if (eventId) params.set("event_id", eventId);
+  if (messageId) params.set("message_id", messageId);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
 export const api = {
   pendingApprovals: () => request("/admin/approvals/pending"),
   notifications: () => request("/admin/notifications"),
@@ -74,4 +82,12 @@ export const api = {
   publishDelayedOrders: (limit) =>
     request(`/orders/monitor/delayed?limit=${limit}`, { method: "POST" }),
   usage: () => request("/admin/usage"),
+  createDemoOrder: (body) =>
+    request("/admin/demo/delayed-order", { method: "POST", body: JSON.stringify(body) }),
+  orderTimeline: (orderId, run = {}) =>
+    request(`/admin/orders/${orderId}/timeline${timelineQuery(run)}`),
+  createDemoTicket: (body) =>
+    request("/admin/demo/ticket", { method: "POST", body: JSON.stringify(body) }),
+  ticketTimeline: (ticketId, run = {}) =>
+    request(`/admin/tickets/${ticketId}/timeline${timelineQuery(run)}`),
 };

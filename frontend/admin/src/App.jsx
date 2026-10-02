@@ -4,6 +4,7 @@ import { useToast } from "./useToast";
 import { ApprovalsSection } from "./components/ApprovalsSelection";
 import { NotificationsSection } from "./components/NotificationsSection";
 import { OrdersSection } from "./components/OrdersSection";
+import { SimulateSection } from "./components/SimulateSection";
 import { TicketsSection } from "./components/TicketsSection";
 import { UsageSection } from "./components/UsageSection";
 
@@ -179,6 +180,8 @@ export default function App() {
                 </button>
             </div>
         </header>
+
+        <SimulateSection onReview={handleReviewApproval} showToast={showToast} />
 
         <ApprovalsSection
                 approvals={approvals.data}

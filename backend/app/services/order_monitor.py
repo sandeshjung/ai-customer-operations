@@ -1,5 +1,5 @@
 import time
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import uuid4
 
 from app.core.redis import redis_client
@@ -8,6 +8,12 @@ from app.events.schemas import Event
 from app.events.types import EventType
 from app.models.order import Order
 from sqlalchemy.orm import Session
+
+
+def delayed_order_dedupe_key(order_id: int, day: date) -> str:
+    """Redis key marking that ORDER_DELAYED was already published for this
+    order today — shared with the demo simulator so it can't double-publish."""
+    return f"delayed_order:{order_id}:{day.isoformat()}"
 
 
 def detect_delayed_orders(db: Session, limit: int | None = None) -> int:
@@ -27,7 +33,7 @@ def detect_delayed_orders(db: Session, limit: int | None = None) -> int:
     for order in delayed_orders:
         delay_days = (today - order.expected_delivery).days
 
-        event_key = f"delayed_order:{order.id}:{today.isoformat()}"
+        event_key = delayed_order_dedupe_key(order.id, today)
 
         if redis_client.exists(event_key):
             continue

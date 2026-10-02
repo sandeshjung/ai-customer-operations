@@ -9,7 +9,7 @@ from app.events.idempotency import (
     try_claim_event,
 )
 from app.events.publisher import EVENT_STREAM
-from app.workers.config import MAX_RETRIES
+from app.workers.config import CONSUMER_GROUP, MAX_RETRIES
 from app.workers.health import record_heartbeat
 
 logger = get_logger(__name__)
@@ -21,7 +21,6 @@ from app.services.agent_service import investigate_delayed_order
 from app.services.approval_service import create_approval
 from app.services.triage_service import process_ticket
 
-CONSUMER_GROUP = "customer_operations_workers"
 CONSUMER_NAME = "worker-1"
 PROCESSING_DELAY_SECONDS = 15
 

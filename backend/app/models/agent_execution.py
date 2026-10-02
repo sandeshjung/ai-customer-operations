@@ -14,6 +14,12 @@ class AgentExecution(Base):
 
     event_id: Mapped[str] = mapped_column(String(100), nullable=False)
 
+    # The order this run was about — set for both agents (triage via the
+    # ticket's order_id), so an order's full agent history is one indexed
+    # query instead of a scan over input_data JSON. Nullable: older rows and
+    # tickets without an order.
+    order_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+
     input_data: Mapped[dict] = mapped_column(
         JSON,
         nullable=False,
@@ -45,6 +51,11 @@ class AgentExecution(Base):
     )
 
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Tool calls the agent made, in order: [{tool, args, result}]. Extracted
+    # from the graph's message history after the run, for the admin
+    # console's order timeline. Null for agents that don't call tools.
+    steps: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,

@@ -780,3 +780,306 @@ td.subject {
   color: var(--red);
   font-size: 12.5px;
 }
+/* Simulator + order timeline ------------------------------------------- */
+
+.sim-panel {
+  padding: 16px 18px;
+}
+
+.sim-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.sim-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sim-form .publish-count {
+  width: 64px;
+}
+
+.sim-hint {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 72ch;
+}
+
+.sim-run {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.sim-run-head {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+.sim-state {
+  font-size: 11px;
+  font-family: "IBM Plex Mono", monospace;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+.sim-state-in_progress {
+  color: var(--teal);
+  border-color: color-mix(in srgb, var(--teal) 40%, transparent);
+}
+.sim-state-awaiting_approval {
+  color: var(--amber);
+  border-color: color-mix(in srgb, var(--amber) 40%, transparent);
+}
+.sim-state-complete {
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--green) 40%, transparent);
+}
+.sim-state-failed {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+}
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tl-stage {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding-bottom: 16px;
+}
+/* connector line between dots */
+.tl-stage:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 16px;
+  bottom: 0;
+  width: 1px;
+  background: var(--border);
+}
+
+.tl-dot {
+  width: 11px;
+  height: 11px;
+  margin-top: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 2px solid var(--text-faint);
+  background: var(--bg);
+}
+.tl-done .tl-dot {
+  background: var(--green);
+  border-color: var(--green);
+}
+.tl-active .tl-dot {
+  border-color: var(--amber);
+  background: var(--amber);
+  animation: pulse 1.1s ease-in-out infinite;
+}
+.tl-failed .tl-dot {
+  background: var(--red);
+  border-color: var(--red);
+}
+.tl-skipped .tl-dot {
+  border-style: dashed;
+}
+
+.tl-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.tl-head {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.tl-label {
+  font-weight: 500;
+}
+.tl-pending .tl-label,
+.tl-skipped .tl-label {
+  color: var(--text-muted);
+}
+.tl-status,
+.tl-time {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-family: "IBM Plex Mono", monospace;
+}
+.tl-active .tl-status {
+  color: var(--amber);
+}
+.tl-failed .tl-status {
+  color: var(--red);
+}
+
+.tl-note {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.tl-error {
+  color: var(--red);
+}
+
+.tl-run {
+  margin-top: 6px;
+  padding: 12px 14px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+}
+
+.tl-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.tl-list li {
+  margin-bottom: 4px;
+}
+
+.tl-steps {
+  margin-top: 10px;
+  font-size: 12px;
+}
+.tl-steps summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.tl-steps ol {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+.tl-steps li {
+  margin-bottom: 8px;
+}
+
+.tl-result {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 180px;
+  overflow: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tl-active .tl-dot {
+    animation: none;
+  }
+}
+
+.sim-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.sim-tab {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.sim-tab:hover {
+  color: var(--text);
+}
+.sim-tab.active {
+  background: var(--surface-raised);
+  color: var(--text);
+}
+
+.sim-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0;
+}
+.sim-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sim-input {
+  width: 100%;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 13px;
+}
+textarea.sim-input {
+  resize: vertical;
+  line-height: 1.5;
+}
+.sim-form .sim-order-input {
+  width: 90px;
+}
+
+.sim-clear {
+  margin-left: auto;
+}
+.sim-run-hint {
+  margin: -6px 0 14px;
+  color: var(--amber);
+}
+
+.tl-quote {
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  border-left: 2px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  white-space: pre-wrap;
+}
+.tl-quote strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.sim-form .sim-email {
+  width: 240px;
+  padding: 5px 8px;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 13px;
+}
+.sim-email.invalid {
+  border-color: var(--red);
+}
+@media (max-width: 640px) {
+  .sim-form label:has(.sim-email) {
+    flex: 1 1 100%;
+  }
+  .sim-form .sim-email {
+    width: 100%;
+  }
+}

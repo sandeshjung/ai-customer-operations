@@ -1,6 +1,7 @@
 from app.api.admin import router as admin_router
 from app.api.customer_portal import router as customer_portal_router
 from app.api.customers import router as customers_router
+from app.api.demo import router as demo_router
 from app.api.health import router as health_router
 from app.api.orders import router as orders_router
 from app.api.products import router as products_router
@@ -53,6 +54,7 @@ app.include_router(shipments_router, prefix=settings.API_V1_PREFIX)
 app.include_router(tickets_router, prefix=settings.API_V1_PREFIX)
 app.include_router(health_router, prefix=settings.API_V1_PREFIX)
 app.include_router(admin_router, prefix=settings.API_V1_PREFIX)
+app.include_router(demo_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/health")
