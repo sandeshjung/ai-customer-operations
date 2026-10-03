@@ -119,7 +119,17 @@ def execute_decision(
                 },
                 trace_context=inject_trace_context(),
             )
-            publish_event(event)
+            # The ticket is already committed. Failing the whole execution
+            # here would let an approval be retried and create a second
+            # ticket, so record the failure instead of raising.
+            try:
+                publish_event(event)
+            except Exception:  # any Redis failure; the ticket must stand
+                logger.exception(
+                    "Couldn't publish TICKET_CREATED — ticket won't be triaged",
+                    extra={"ticket_id": ticket.id, "order_id": order_id},
+                )
+                actions.append("triage_event_failed")
 
         logger.info(
             "Ticket created",

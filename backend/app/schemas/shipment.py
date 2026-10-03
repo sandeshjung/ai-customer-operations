@@ -13,4 +13,4 @@ class ShipmentResponse(BaseModel):
     tracking_number: str
     status: ShipmentStatus
     last_location: str | None
-    last_update: datetime
+    last_updated: datetime

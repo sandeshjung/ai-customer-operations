@@ -3,11 +3,12 @@ import logging
 import re
 import time
 
+from app.agents.guardrails import validate_triage_decision
 from app.agents.models import TriageDecision
 from app.agents.prompts import TRIAGE_SYSTEM_PROMPT, build_triage_user_prompt
 from app.core.config import settings
 from app.core.tracing import current_trace_id, traced
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
 from langgraph.graph import END, START, StateGraph
 
@@ -54,7 +55,9 @@ def triage_node(state: TriageState):
         response = llm.invoke(
             [
                 SystemMessage(content=TRIAGE_SYSTEM_PROMPT),
-                SystemMessage(content=prompt),
+                # Customer text lives here, so it must not carry system-role
+                # authority — it goes in as the user turn.
+                HumanMessage(content=prompt),
             ]
         )
         usage = getattr(response, "usage_metadata", None)
@@ -91,6 +94,9 @@ def triage_node(state: TriageState):
         decision_data = json.loads(match.group())
 
     decision = TriageDecision.model_validate(decision_data)
+    decision = validate_triage_decision(
+        decision, str(ticket.get("subject", "")), str(ticket.get("message", ""))
+    )
     decision.trace_id = current_trace_id()
 
     logger.info(

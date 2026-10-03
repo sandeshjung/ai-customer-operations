@@ -4,7 +4,12 @@ from app.core.security import require_api_key
 from app.models.agent_execution import AgentExecution
 from app.models.customer import Customer
 from app.models.notification import Notification
-from app.services.approval_service import approve, get_pending_approvals, reject
+from app.services.approval_service import (
+    ApprovalExecutionError,
+    approve,
+    get_pending_approvals,
+    reject,
+)
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func
@@ -84,6 +89,8 @@ def approve_approval(
         }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except ApprovalExecutionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
 
 
 @router.post("/approvals/{approval_id}/reject")

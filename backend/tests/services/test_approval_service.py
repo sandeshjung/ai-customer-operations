@@ -218,3 +218,53 @@ class TestReject:
             approval_service.reject(
                 db=db_session, approval_id=approval.id, reviewer="bob"
             )
+
+
+class TestApproveExecutionFailure:
+    """Regression: approve() committed APPROVED before executing the decision.
+    If execution then failed, the approval was stuck as APPROVED with nothing
+    executed, and every retry got "Approval already APPROVED"."""
+
+    def test_failed_execution_puts_approval_back_to_pending(self, db_session):
+        approval = _make_pending_approval(db_session)
+
+        with (
+            patch.object(
+                approval_service,
+                "execute_decision",
+                side_effect=RuntimeError("database unavailable"),
+            ),
+            pytest.raises(approval_service.ApprovalExecutionError),
+        ):
+            approval_service.approve(
+                db=db_session, approval_id=approval.id, reviewer="alice"
+            )
+
+        db_session.expire_all()
+        reloaded = db_session.get(HumanApproval, approval.id)
+        assert reloaded.status == ApprovalStatus.PENDING.value
+        assert reloaded.reviewed_by is None
+        assert reloaded.reviewed_at is None
+
+    def test_can_be_approved_again_after_a_failed_attempt(self, db_session):
+        approval = _make_pending_approval(db_session)
+
+        with (
+            patch.object(
+                approval_service, "execute_decision", side_effect=RuntimeError("boom")
+            ),
+            pytest.raises(approval_service.ApprovalExecutionError),
+        ):
+            approval_service.approve(
+                db=db_session, approval_id=approval.id, reviewer="alice"
+            )
+
+        with patch.object(
+            approval_service, "execute_decision", return_value={"actions": []}
+        ) as mock_execute:
+            result_approval, _ = approval_service.approve(
+                db=db_session, approval_id=approval.id, reviewer="alice"
+            )
+
+        assert result_approval.status == ApprovalStatus.APPROVED.value
+        mock_execute.assert_called_once()

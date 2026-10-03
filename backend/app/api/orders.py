@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session, selectinload
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
+MAX_MONITOR_PUBLISH = 100
+
 
 @router.get(
     "/delayed",
@@ -162,7 +164,9 @@ def create_order(
     ],
 )
 def monitor_delayed_orders(
-    limit: int | None = Query(default=None, gt=0),
+    # Bounded: every published event becomes a full agent run (real LLM
+    # calls). Unbounded, one click could queue thousands of orders.
+    limit: int = Query(default=10, gt=0, le=MAX_MONITOR_PUBLISH),
     db: Session = Depends(get_db),
 ):
     published = detect_delayed_orders(db, limit=limit)

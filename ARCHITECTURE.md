@@ -57,11 +57,11 @@ sequenceDiagram
 
     Admin->>API: POST /orders/monitor/delayed?limit=N (X-API-Key)
     API->>API: find orders past expected_delivery, skip any already published today
-    API->>Stream: XADD ORDER_DELAYED (5 s between events)
+    API->>Stream: XADD ORDER_DELAYED (limit 10 by default, max 100)
     API-->>Admin: published_events N
 
     Worker->>Stream: XREADGROUP (count 1, block 5 s)
-    Worker->>Worker: SET processed_event:id NX (atomic claim, skip if taken)
+    Worker->>Worker: SET processed_event:id processing NX (atomic claim, skip if taken)
     Worker->>DOA: investigate_delayed_order(order_id, delay_days)
 
     loop until no tool calls, max 5 tool iterations
@@ -315,8 +315,8 @@ then `XRANGE` between them). Failures come from scanning the dead-letter
 stream for the event. Each response has a `state` (`in_progress`,
 `awaiting_approval`, `complete`, `failed`) so the UI knows when to stop
 polling. The module deliberately doesn't import the graphs or the worker,
-which would load the RAG stack at import time (`CLAUDE.md` gotcha #1). For
-the same reason `CONSUMER_GROUP` lives in `workers/config.py`.
+which would pull the whole agent stack into the API process. For the same
+reason `CONSUMER_GROUP` lives in `workers/config.py`.
 
 ## Worked example: one delayed order, end to end
 
@@ -572,16 +572,30 @@ The README's "Techniques and concepts" section covers the *what*. This
 section covers the choices that are easy to get wrong.
 
 **Four layers of event idempotency, each for a different duplicate.**
-1. The detector writes a Redis key `delayed_order:{order_id}:{date}` (24 h
-   TTL), so clicking "Publish" twice in one day doesn't enqueue the same
-   order twice.
+1. The detector claims a Redis key `delayed_order:{order_id}:{date}` with
+   `SET NX` (24 h TTL) *before* publishing, so clicking "Publish" twice in
+   one day, or two overlapping runs, can't enqueue the same order twice. If
+   publishing fails, the key is deleted again.
 2. The consumer group gives each stream entry to one consumer.
-3. `SET processed_event:{event_id} NX` stops a redelivered event (or a
-   second worker racing the first) from being processed twice. It's checked
-   *before* processing, not after.
+3. `SET processed_event:{event_id} processing NX` stops a redelivered event
+   (or a second worker racing the first) from being processed twice. It's
+   checked *before* processing, not after. The claim has two states:
+   `processing` (20 min TTL) while working, and `done` (24 h) on success.
 4. On final failure the claim is *released* before the event is dead-lettered.
    That way a manual replay from the DLQ isn't silently skipped as "already
    processed".
+
+**A worker that dies mid-event doesn't lose the event.** An unacked message
+stays in the consumer group's pending list. On start-up the worker re-reads
+its own pending messages (`XREADGROUP` from ID `0`). Every minute it also takes
+over other consumers' messages idle for more than 20 minutes (`XAUTOCLAIM`),
+which only matters with several workers. A recovered event whose claim is
+`done` is just acked, because it finished before the crash. Otherwise the
+worker takes over the dead worker's `processing` claim and runs the event
+again. While an event runs, a background thread keeps the heartbeat alive, so
+a slow event isn't restarted by autoheal. It stops after
+`WORKER_MAX_EVENT_SECONDS` (15 min), so a genuinely hung worker still gets
+restarted.
 
 **Guardrails after the model, not in the prompt.** The prompt asks the model
 to set `requires_human`. `validate_decision()` then overrides it for
@@ -621,14 +635,24 @@ graph code didn't change.
 **Hybrid retrieval with RRF.** BM25 and Qdrant results are fetched
 (sequentially, top `2 × limit` each) and fused with Reciprocal Rank Fusion
 (`Σ 1/(60 + rank)`). RRF uses only rank, not score, so there's no need to
-make BM25 scores and cosine similarities comparable. Results are LRU-cached
+make BM25 scores and cosine similarities comparable. A chunk is identified
+across the two lists by `(source, page, chunk_index)`. `chunk_index` restarts
+on every page, and an earlier key without the page made 38 of the 54 chunks
+collide, so one passage was silently dropped and its score credited to
+another. Before fusion, vector results below `RAG_MIN_SIMILARITY` (0.45
+cosine) are dropped. That value was measured on the RAG eval set: it's the
+highest cutoff that keeps recall@5 at 12/12, while the previous 0.6 dropped
+it to 9/12 and left three questions with no vector results. The embedding
+model, Qdrant connection and BM25 index all load on first use, and the
+worker warms them up at start-up. Results are LRU-cached
 (50 entries) in-process. The cache key is the query lowercased, trimmed, and
 **truncated to 50 characters**, so two long queries that share a 50-character
 prefix get the same cached result.
 
-**Why the pacing looks excessive.** There's a 5 s gap between published
-events, a 30 s sleep after each processed event, and backoff plus
-checkpointing in the evaluation harness. All of it comes from the Groq free
+**Why the pacing looks excessive.** There's a 30 s sleep after each processed
+event, and backoff plus checkpointing in the evaluation harness. (There used
+to be a 5 s gap between published events too. It ran inside the HTTP request
+and protected nothing, since the worker paces itself, so it was removed.) All of it comes from the Groq free
 tier. Even with the 30 s sleep, the worked example's decision call hit two
 `429`s.
 
@@ -639,7 +663,14 @@ the running system, and a few while building the simulator and emails. Each
 is recorded here so the docs describe what the code does rather than what it
 was meant to do. (Fixed since the first version of this list: triage runs
 recorded zero tokens because `TriageState` didn't declare the usage keys.
-They're now declared, with a regression test, `test_triage_usage.py`.)
+They're now declared, with a regression test, `test_triage_usage.py`. Also fixed:
+`POST /shipments/{id}` always returned 500 after saving the shipment, because
+the response schema named a field `last_update`, and it set the invalid order
+status "Shipped". A failed approval execution left the approval stuck as
+APPROVED. A worker that died mid-event lost the event. `make test` collected
+the manual scripts in `backend/scripts/`. The triage prompt could be broken
+out of with a closing delimiter tag, left customer history undelimited, and
+sent customer text as a system message.)
 
 - **The approval-path OTel Link is never created.** `approval_service.approve()`
   builds the Link from `decision.trace_context`. Nothing in production code
@@ -657,9 +688,6 @@ They're now declared, with a regression test, `test_triage_usage.py`.)
   them, so Postgres rejects it with a foreign-key violation. The rejected
   run makes no changes. To reseed from scratch, use
   `docker compose down -v`, which destroys *all* volumes.
-- **`POST /shipments/{order_id}` sets `order.status = "Shipped"`.** That isn't
-  a valid `OrderStatus` value (they're upper-case), and since the column is
-  a plain string nothing rejects it.
 - **Six tests fail even with network access.**
   - 4 in `tests/agents/test_delayed_order.py` call the real Groq API, but
     `conftest.py` injects a dummy `LLM_API_KEY`, so they get a 401.

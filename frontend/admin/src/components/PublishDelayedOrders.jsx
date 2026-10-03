@@ -31,7 +31,7 @@ export function PublishDelayedOrders({ onPublish }) {
         }}
       />
       <button className="ghost" disabled={pending} onClick={handleClick}>
-        {pending ? `Publishing… (~${count * 5}s)` : `Publish ${count} to event stream`}
+        {pending ? "Publishing…" : `Publish ${count} to event stream`}
       </button>
     </div>
   );

@@ -9,6 +9,7 @@ _fake_rag_service = types.ModuleType("app.rag.service")
 _fake_rag_service.retrieve_policy = lambda query, limit=5: []
 sys.modules["app.rag.service"] = _fake_rag_service
 
+from contextlib import nullcontext
 from unittest.mock import call, patch
 
 import pytest
@@ -44,6 +45,12 @@ def _patch_common():
     with (
         patch.object(event_consumer, "create_consumer_group"),
         patch.object(event_consumer, "record_heartbeat"),
+        # Start-up recovery and stale-message reclaiming have their own tests
+        # (test_event_recovery.py); here they'd consume the scripted reads.
+        patch.object(event_consumer, "recover_pending_messages"),
+        patch.object(event_consumer, "reclaim_stale_messages"),
+        patch.object(event_consumer, "mark_event_done"),
+        patch.object(event_consumer, "keep_alive", lambda: nullcontext()),
         patch("time.sleep"),
     ):
         yield

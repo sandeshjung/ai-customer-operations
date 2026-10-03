@@ -1,17 +1,11 @@
 #!/bin/sh
-# Importing app.services.agent_service / triage_service (which
-# event_consumer.py does at module level) transitively imports
-# app.rag.retriever, which calls QdrantVectorStore.from_existing_collection
-# at *import time* — that raises if the collection doesn't exist yet.
-# On a fresh Qdrant volume (first `docker compose up`) nothing has ever
-# run the ingestion script, so the worker would crash-loop forever.
-# Ingest once up front if the collection is missing, then start the worker.
+# On a fresh Qdrant volume (first `docker compose up`) nothing has ever run
+# the ingestion script, so every policy search would fail. Ingest once up
+# front if the collection is missing, then start the worker.
 #
-# This check talks to Qdrant directly instead of importing
-# app.rag.vector_store — that module loads a real HuggingFace embedding
-# model at import time (see CLAUDE.md), which would otherwise double the
-# already-slow cold-start cost every single time the worker starts, just
-# to answer a yes/no collection-existence question.
+# This check talks to Qdrant directly rather than through app.rag: it only
+# needs a yes/no answer, so there's no reason to load the embedding model
+# (see CLAUDE.md gotchas #1 and #9).
 set -e
 
 python -c "

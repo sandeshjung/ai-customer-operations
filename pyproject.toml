@@ -33,6 +33,8 @@ dependencies = [
     "redis>=8.1.0",
     "sentence-transformers>=6.0.0",
     "sqlalchemy>=2.0.52",
+    # Direct dependency only so [tool.uv.sources] can pin it to the CPU index below.
+    "torch>=2.13.0",
     "uvicorn[standard]>=0.52.4",
     "opentelemetry-api>=1.38.0",
     "opentelemetry-sdk>=1.38.0",
@@ -58,10 +60,24 @@ packages = ["backend/app"]
 
 [tool.pytest.ini_options]
 pythonpath = ["backend"]
+# Only the real test suite. backend/scripts/ holds manual scripts that publish
+# real events and call the real LLM at import time — they must never be
+# collected (tests/conftest.py, which injects dummy keys, doesn't cover them).
+testpaths = ["backend/tests"]
 
 
 [tool.uv]
 package = true
+
+# CPU-only PyTorch: the containers have no GPU, and the default PyPI Linux wheel
+# pulls ~3 GB of CUDA libraries that are never used.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.ruff.lint.per-file-ignores]
 "backend/app/api/*.py" = ["B008"]

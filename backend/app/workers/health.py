@@ -1,5 +1,6 @@
 import threading
 import time
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from app.core.config import settings
@@ -18,6 +19,39 @@ def record_heartbeat() -> None:
         )
     except Exception as exc:  # noqa: BLE001 - heartbeat failures must never propagate
         logger.warning("Failed to record worker heartbeat", extra={"error": str(exc)})
+
+
+@contextmanager
+def keep_alive(max_seconds: float | None = None, interval: float = 15):
+    """Heartbeat from a background thread while one event is processing.
+
+    The main loop only heartbeats between events, so a slow event (LLM
+    retries, rate-limit backoff) used to let the heartbeat expire and get the
+    worker restarted mid-event by autoheal. This keeps it alive — but only up
+    to max_seconds, so a worker that's genuinely stuck still goes unhealthy.
+    """
+    limit = settings.WORKER_MAX_EVENT_SECONDS if max_seconds is None else max_seconds
+    deadline = time.monotonic() + limit
+    stop = threading.Event()
+
+    def _beat():
+        while not stop.wait(interval):
+            if time.monotonic() > deadline:
+                logger.error(
+                    "Event exceeded WORKER_MAX_EVENT_SECONDS — stopping heartbeat",
+                    extra={"max_seconds": limit},
+                )
+                return
+            record_heartbeat()
+
+    record_heartbeat()
+    thread = threading.Thread(target=_beat, daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        thread.join(timeout=1)
 
 
 def is_healthy() -> bool:

@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION: str = "customer_operations_knowledge"
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # Vector results below this cosine similarity are dropped before fusion.
+    # Measured on the 12 RAG eval questions with all-MiniLM-L6-v2: 0.45 is the
+    # highest cutoff that keeps recall@5 at 12/12 (0.6 dropped it to 9/12 and
+    # left 3 questions with no vector results at all). Re-measure if you
+    # change EMBEDDING_MODEL — similarity scales differ between models.
+    RAG_MIN_SIMILARITY: float = 0.45
 
     LLM_API_KEY: str | None = None
     LLM_MODEL: str = "openai/gpt-oss-120b"
@@ -64,6 +70,10 @@ class Settings(BaseSettings):
     # "hung/crashed but the process technically hasn't exited yet".
     WORKER_HEALTH_PORT: int = 8001
     WORKER_HEARTBEAT_TTL_SECONDS: int = 60
+    # While one event is processing, the worker keeps heartbeating for up to
+    # this long. Past it, heartbeats stop, the health check fails, and
+    # autoheal restarts the worker — that's a genuine hang, not a slow event.
+    WORKER_MAX_EVENT_SECONDS: int = 900
 
     # CORS. In DEBUG (the local dev default) any localhost/127.0.0.1 port is
     # allowed, since Vite bumps ports whenever more than one dev server is

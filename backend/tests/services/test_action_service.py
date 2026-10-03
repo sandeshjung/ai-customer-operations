@@ -335,3 +335,25 @@ class TestTicketAcknowledgement:
             db_session.query(Notification).filter_by(customer_id=customer.id).count()
             == 0
         )
+
+
+def test_triage_event_publish_failure_keeps_the_ticket(db_session):
+    """The ticket is already committed when TICKET_CREATED is published. If
+    publishing fails, failing the whole execution would roll an approval back
+    to PENDING and a retry would create a second ticket — so it's recorded as
+    an action instead."""
+    customer, order = _make_customer_and_order(db_session)
+
+    with patch.object(
+        action_service, "publish_event", side_effect=ConnectionError("redis down")
+    ):
+        result = action_service.execute_decision(
+            db=db_session,
+            order_id=order.id,
+            customer_id=customer.id,
+            decision=_decision(resolution="ESCALATE", customer_message=None),
+        )
+
+    assert "escalation_ticket_created" in result["actions"]
+    assert "triage_event_failed" in result["actions"]
+    assert db_session.get(SupportTicket, result["ticket_id"]) is not None

@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from app.core.database import get_db
 from app.core.security import require_api_key
-from app.models.order import Order
+from app.models.order import Order, OrderStatus
 from app.models.shipment import Shipment, ShipmentStatus
 from app.schemas.shipment import ShipmentResponse
 from fastapi import APIRouter, Depends, HTTPException
@@ -36,6 +36,12 @@ def create_shipment(
             detail="Shipment already exists for this order",
         )
 
+    if db.query(Shipment).filter(Shipment.tracking_number == tracking_number).first():
+        raise HTTPException(
+            status_code=400,
+            detail="Tracking number already in use",
+        )
+
     shipment = Shipment(
         order_id=order_id,
         carrier=carrier,
@@ -47,7 +53,7 @@ def create_shipment(
 
     db.add(shipment)
 
-    order.status = "Shipped"
+    order.status = OrderStatus.SHIPPED
 
     db.commit()
     db.refresh(shipment)

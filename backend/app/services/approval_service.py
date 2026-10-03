@@ -97,13 +97,58 @@ def _claim_approval(
     return db.get(HumanApproval, approval_id)
 
 
+class ApprovalExecutionError(RuntimeError):
+    """Executing an approved decision failed. The approval has been put back
+    to PENDING, so it can be approved again once the cause is fixed."""
+
+
+def _release_approval(db: Session, approval_id: int) -> None:
+    """Undo a claim whose execution failed: APPROVED -> PENDING. Atomic like
+    _claim_approval, so it can't clobber a concurrent reviewer's change."""
+    db.rollback()  # the failed execution may have left the session unusable
+    result = db.execute(
+        update(HumanApproval)
+        .where(
+            HumanApproval.id == approval_id,
+            HumanApproval.status == ApprovalStatus.APPROVED.value,
+        )
+        .values(
+            status=ApprovalStatus.PENDING.value,
+            reviewed_by=None,
+            reviewed_at=None,
+            reviewer_notes=None,
+        )
+    )
+    result.close()
+    db.commit()
+
+
 def approve(
     db: Session, approval_id: int, reviewer: str, notes: str | None = None
 ) -> tuple[HumanApproval, dict]:
     approval = _claim_approval(
         db, approval_id, ApprovalStatus.APPROVED, reviewer, notes
     )
+    try:
+        return _execute_approved(db, approval, approval_id, reviewer)
+    except Exception as exc:
+        # The claim is committed before execution (that's what makes it
+        # race-safe), so a failure here must be undone explicitly — otherwise
+        # the approval is stuck APPROVED with nothing executed, and every
+        # retry gets "Approval already APPROVED".
+        logger.exception(
+            "Executing approved decision failed — approval returned to PENDING",
+            extra={"approval_id": approval_id, "reviewer": reviewer},
+        )
+        _release_approval(db, approval_id)
+        raise ApprovalExecutionError(
+            "Couldn't execute the decision; the approval is pending again — retry."
+        ) from exc
 
+
+def _execute_approved(
+    db: Session, approval: HumanApproval, approval_id: int, reviewer: str
+) -> tuple[HumanApproval, dict]:
     # reconstruct decision and execute
     decision = AgentDecision.model_validate(approval.decision)
 
