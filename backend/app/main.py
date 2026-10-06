@@ -1,3 +1,5 @@
+import logging
+
 from app.api.admin import router as admin_router
 from app.api.customer_portal import router as customer_portal_router
 from app.api.customers import router as customers_router
@@ -38,6 +40,12 @@ if settings.DEBUG:
         allow_headers=["*"],
     )
 else:
+    if not settings.cors_allowed_origins:
+        logging.getLogger(__name__).warning(
+            "DEBUG is off and CORS_ALLOWED_ORIGINS is empty: browsers will be "
+            "refused cross-origin access, so the admin console and customer "
+            "portal can't reach the API."
+        )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_allowed_origins,

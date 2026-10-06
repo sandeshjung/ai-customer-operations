@@ -17,7 +17,7 @@ export function TicketsList({ tickets }) {
         {tickets.map((ticket) => (
           <li key={ticket.id}>
             <div className="ticket-row">
-              <span className="ticket-subject">{ticket.subject}</span>
+              <span className="ticket-subject">{ticket.title}</span>
               <span className={`status-pill status-${ticket.status.toLowerCase()}`}>
                 {formatTicketStatus(ticket.status)}
               </span>

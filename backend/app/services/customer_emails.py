@@ -170,3 +170,22 @@ def _render(
         f"{escape(settings.MAILJET_SENDER_NAME)}</p></div>"
     )
     return CustomerEmail(subject=subject, text="\n\n".join(text_parts), html=html)
+
+
+# Subjects action_service.execute_decision() gives the tickets the
+# delayed-order agent opens. They're internal (they name the severity), so the
+# customer portal shows customer_ticket_title() instead.
+AGENT_TICKET_SUBJECT_PREFIXES = (
+    "ESCALATED: Delayed order",
+    "Delayed order - ",
+    "Follow-up: track shipment",
+    "Follow-up: contact carrier",
+)
+
+
+def customer_ticket_title(subject: str, order_id: int | None) -> str:
+    """What the customer sees for a ticket: their own subject line if they
+    filed it, a plain description if the agent opened it."""
+    if subject.startswith(AGENT_TICKET_SUBJECT_PREFIXES):
+        return f"Delay on order #{order_id}" if order_id else "Delay on your order"
+    return subject

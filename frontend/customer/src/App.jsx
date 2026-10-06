@@ -39,7 +39,7 @@ export default function App() {
       setOrder(foundOrder);
 
       try {
-        const foundTickets = await api.ticketsForCustomer(foundOrder.customer_id);
+        const foundTickets = await api.ticketsForOrder(foundOrder.order_id);
         setTickets(foundTickets);
       } catch {
         setTickets([]);

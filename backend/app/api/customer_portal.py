@@ -4,7 +4,13 @@ from app.api.orders import get_order
 from app.core.database import get_db
 from app.core.security import rate_limit
 from app.models.order import OrderStatus
-from app.schemas.customer_portal import CustomerOrderLookupResponse, ShipmentInfo
+from app.models.support_ticket import SupportTicket
+from app.schemas.customer_portal import (
+    CustomerOrderLookupResponse,
+    CustomerTicket,
+    ShipmentInfo,
+)
+from app.services.customer_emails import customer_ticket_title
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -71,3 +77,40 @@ def lookup_order(
         delay_days=delay_days,
         shipment=shipment,
     )
+
+
+@router.get(
+    "/orders/{order_id}/tickets",
+    response_model=list[CustomerTicket],
+    dependencies=[
+        Depends(rate_limit("portal_order_lookup", max_requests=20, window_seconds=60))
+    ],
+)
+def list_order_customer_tickets(
+    order_id: int,
+    db: Session = Depends(get_db),
+):
+    """The tickets of the customer who placed this order — same scope as the
+    order lookup above, but only the fields a customer should see. Replaces
+    the portal's use of GET /tickets, which returns internal fields and now
+    needs the admin key."""
+    try:
+        order = get_order(order_id, db)
+    except HTTPException:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND_DETAIL) from None
+
+    tickets = (
+        db.query(SupportTicket)
+        .filter(SupportTicket.customer_id == order.customer_id)
+        .order_by(SupportTicket.created_at.desc())
+        .all()
+    )
+    return [
+        CustomerTicket(
+            id=ticket.id,
+            title=customer_ticket_title(ticket.subject, ticket.order_id),
+            status=getattr(ticket.status, "value", ticket.status),
+            created_at=ticket.created_at,
+        )
+        for ticket in tickets
+    ]

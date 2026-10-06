@@ -6,7 +6,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     APP_NAME: str = "AI Customer Operations"
     APP_ENV: str = "development"
-    DEBUG: bool = True
+    # Off unless .env turns it on: DEBUG enables the any-localhost-port CORS
+    # rule and FastAPI's debug tracebacks, so a deployment that never sets it
+    # must not get either (same fail-closed idea as ADMIN_API_KEY).
+    DEBUG: bool = False
 
     redis_url: str = "redis://localhost:6379/0"
 
@@ -34,6 +37,11 @@ class Settings(BaseSettings):
 
     LLM_API_KEY: str | None = None
     LLM_MODEL: str = "openai/gpt-oss-120b"
+    # Retries per LLM call on 429/5xx. The Groq client waits for the
+    # retry-after header Groq sends with a 429, so this rides out a
+    # tokens-per-minute window (8K TPM on the free tier) instead of failing
+    # the event. The client's own default is 2.
+    LLM_MAX_RETRIES: int = 5
 
     OTEL_ENABLED: bool = True
     OTEL_SERVICE_NAME: str = "ai-customer-operations"
@@ -57,6 +65,12 @@ class Settings(BaseSettings):
     MAILJET_SENDER_NAME: str = "Customer Support"
 
     ADMIN_API_KEY: str | None = None
+
+    # The admin console's simulator (/admin/demo/*) creates real customers,
+    # orders and tickets, and each simulated order costs LLM calls. On for the
+    # demo; set false in any environment that shouldn't have it — the routes
+    # then return 404.
+    DEMO_ENDPOINTS_ENABLED: bool = True
 
     # Base URL of the customer portal ("Track your order"). Customer emails
     # link to {CUSTOMER_PORTAL_URL}/?order=<id>, which opens that order.

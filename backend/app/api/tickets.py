@@ -1,11 +1,17 @@
 from typing import Any
 
 from app.core.database import get_db
+from app.core.security import require_api_key
 from app.models.support_ticket import SupportTicket, TicketStatus
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload
 
-router = APIRouter(prefix="/tickets", tags=["Tickets"])
+# Admin-only: returns every customer's tickets with their email address and
+# the agent's internal subject and reasoning. The customer portal uses
+# GET /portal/orders/{order_id}/tickets instead.
+router = APIRouter(
+    prefix="/tickets", tags=["Tickets"], dependencies=[Depends(require_api_key)]
+)
 
 
 def _value_of(value):

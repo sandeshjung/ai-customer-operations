@@ -16,6 +16,13 @@ def require_api_key(
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
+def require_demo_enabled() -> None:
+    # 404 rather than 403, and checked before the API key, so a disabled
+    # simulator looks like it doesn't exist at all.
+    if not settings.DEMO_ENDPOINTS_ENABLED:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+
 def rate_limit(key_prefix: str, max_requests: int, window_seconds: int):
     def _dependency(request: Request) -> None:
         if not settings.RATE_LIMIT_ENABLED:

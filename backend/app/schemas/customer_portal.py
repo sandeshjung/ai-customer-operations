@@ -26,3 +26,13 @@ class CustomerOrderLookupResponse(BaseModel):
     is_delayed: bool
     delay_days: int | None
     shipment: ShipmentInfo | None
+
+
+class CustomerTicket(BaseModel):
+    """A ticket as the customer portal shows it — no internal subject, agent
+    reasoning, priority or email address."""
+
+    id: int
+    title: str
+    status: str
+    created_at: datetime

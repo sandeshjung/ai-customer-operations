@@ -20,6 +20,7 @@ MAX_MONITOR_PUBLISH = 100
 @router.get(
     "/delayed",
     response_model=list[DelayedOrderResponse],
+    dependencies=[Depends(require_api_key)],
 )
 def get_delayed_orders(
     db: Session = Depends(get_db),
@@ -65,9 +66,12 @@ def get_delayed_orders(
     return results
 
 
+# Admin-only over HTTP. The customer portal reads orders through
+# /portal/orders/{order_id}, which calls this function directly.
 @router.get(
     "/{order_id}",
     response_model=OrderResponse,
+    dependencies=[Depends(require_api_key)],
 )
 def get_order(
     order_id: int,

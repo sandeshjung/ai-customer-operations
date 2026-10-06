@@ -1,5 +1,5 @@
 from app.core.database import get_db
-from app.core.security import rate_limit, require_api_key
+from app.core.security import rate_limit, require_api_key, require_demo_enabled
 from app.models.support_ticket import TicketPriority
 from app.services.demo_service import (
     ShipmentScenario,
@@ -12,7 +12,9 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
 router = APIRouter(
-    prefix="/admin", tags=["Demo"], dependencies=[Depends(require_api_key)]
+    prefix="/admin",
+    tags=["Demo"],
+    dependencies=[Depends(require_demo_enabled), Depends(require_api_key)],
 )
 
 

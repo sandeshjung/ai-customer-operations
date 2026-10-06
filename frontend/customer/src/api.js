@@ -31,7 +31,7 @@ export const api = {
   // NOTE: public lookup by order number alone — no authentication. See the
   // comment in backend/app/api/customer_portal.py for the trade-off.
   lookupOrder: (orderId) => request(`/portal/orders/${encodeURIComponent(orderId)}`),
-  ticketsForCustomer: (customerId) => request(`/tickets?customer_id=${encodeURIComponent(customerId)}`),
+  ticketsForOrder: (orderId) => request(`/portal/orders/${encodeURIComponent(orderId)}/tickets`),
 };
 
 export { ApiError };

@@ -31,9 +31,12 @@ def create_customer(
     return customer
 
 
+# Admin-only: customer IDs are sequential, so a public lookup would let
+# anyone list every customer's name and email address.
 @router.get(
     "/{customer_id}",
     response_model=CustomerResponse,
+    dependencies=[Depends(require_api_key)],
 )
 def get_customer(
     customer_id: int,
