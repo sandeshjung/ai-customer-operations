@@ -23,7 +23,8 @@ reliability) rather than just the happy path.
 ![System architecture: the Order Monitor and the admin console's demo simulator publish ORDER_DELAYED and TICKET_CREATED to Redis Streams; an Event Consumer worker routes events to the Delayed Order Agent or the Triage Agent; the Delayed Order Agent's decision passes through Guardrails into either a Human Approval Queue or auto-execution; both converge on an Action Service that creates a Support Ticket and acknowledges it to the customer; escalated and contact-customer tickets re-enter Redis Streams as TICKET_CREATED; the Triage Agent updates the ticket and emails the customer a status update; every customer email links back to the order in the customer portal; both agents share Postgres, a hybrid BM25+Qdrant RAG layer, and the Groq LLM; every call is traced to OpenTelemetry, and every run's token usage and tool calls are recorded per task for the admin console.](image/architecture.png)
 
 **Core flow:** `ORDER_DELAYED` event → Delayed Order Agent investigates
-(tool calls + hybrid RAG over the shipping policy) → decision → guardrails
+(prefetched order records + tool calls for hybrid RAG over the shipping
+policy) → decision → guardrails
 check → auto-executed or queued for human approval → executing it creates
 a support ticket → escalation and contact-customer tickets are
 acknowledged to the customer by email and publish `TICKET_CREATED` →
@@ -52,10 +53,16 @@ edit it and re-screenshot at 1280px wide (full page) to regenerate the PNG.
 ### Agentic tool use (LangGraph)
 
 The Delayed Order Agent is a real tool-calling loop, not a single prompt:
-it decides for itself which of `get_order`, `get_shipment`, `get_customer`,
-and `search_shipping_policy` to call, over up to 5 iterations, before
+it decides for itself what to look up, over up to 5 iterations, before
 producing a structured decision (severity, resolution, reasoning,
-optional customer message). The Triage Agent is deliberately simpler —
+optional customer message). The order, shipment and customer records it
+always needs are prefetched into its first message, so its tool calls go
+on what actually varies — usually `search_shipping_policy` — and the turn
+in which it stops calling tools *is* the decision, with a separate
+decision call only as a fallback. That keeps a run to 2–3 LLM calls
+(down from 6–7), which matters on Groq's free tier: `gpt-oss-120b` gets
+8K tokens a minute, and every call resends the whole conversation.
+Hitting the 5-iteration cap always sends the decision to a human. The Triage Agent is deliberately simpler —
 one classification call per ticket — because ticket triage doesn't need
 investigation, just judgment.
 
@@ -77,7 +84,7 @@ dropped before fusion. Embeddings come from
 `sentence-transformers/all-MiniLM-L6-v2`, run locally. The model, the
 Qdrant connection and the BM25 index load on first use, so importing the
 RAG code is cheap. Retrieval results are also cached in-process (LRU, 50
-entries), keyed on the lowercased query's first 50 characters, and
+entries), keyed on the whole lowercased, whitespace-normalized query, and
 visible as a `cache_hit` span attribute in traces.
 
 The agent is instructed to retrieve policy before making a decision and
@@ -141,10 +148,8 @@ follow-up event, the trace context is injected into the event payload so
 the consumer continues the *same* trace. The human-approval path is
 different on purpose — by the time someone clicks Approve, the original
 trace is long closed, so that path is designed to use an OTel **Link** (a
-cross-trace reference) instead of a parent-child relationship. As built,
-the Link is never populated and the approval span carries only an
-`original_trace_id` attribute (see
-[ARCHITECTURE.md](ARCHITECTURE.md#known-gaps)). Exports to Jaeger
+cross-trace reference) instead of a parent-child relationship: the
+decision stores its trace carrier, and approving it creates the Link. Exports to Jaeger
 locally by default; swapping to Langfuse is a two-environment-variable
 change, since Langfuse OSS ingests OTLP natively.
 
@@ -164,8 +169,8 @@ shown on expand, alongside a per-agent/model breakdown. Runs are tied to
 their task by a `task_id` that travels with the events: the ID of the
 event that started the work, forwarded on the follow-up `TICKET_CREATED`.
 Cost is estimated from a small `$/token` pricing table — a rough
-efficiency signal, explicitly not billing-grade. Current gap: the default
-model isn't in the pricing table, so cost shows as unknown.
+efficiency signal, explicitly not billing-grade. A model missing from the
+table shows its cost as unknown rather than as $0.
 
 ### Security
 
@@ -175,15 +180,14 @@ model isn't in the pricing table, so cost shows as unknown.
   (triggering delay detection, the demo simulator, portal lookups) —
   enough to stop accidental abuse, not a determined attacker.
 - **CORS**: environment-aware — permissive `localhost:*` only in debug
-  mode, an explicit origin allowlist otherwise.
-- **Public reads**: writes and `/admin/*` require the key; every other
-  `GET` is public, because a guest portal can't hold an API key. The
-  portal's order lookup takes just an order number and is rate-limited —
+  mode, an explicit origin allowlist otherwise. `DEBUG` defaults to off, so
+  an unconfigured deployment gets the strict setting.
+- **Public reads**: only the customer portal's two reads (order lookup and
+  that order's tickets, with customer-safe fields only), product reads and
+  health checks are public, because a guest portal can't hold an API key.
+  The portal's order lookup takes just an order number and is rate-limited —
   order IDs are sequential, so it's enumerable by design (a demo
-  trade-off, not real authentication). The public reads are
-  wider than the portal needs, though (`GET /tickets` and
-  `GET /orders/delayed` return customer emails unfiltered); the full
-  endpoint-by-endpoint table and the fix are in
+  trade-off, not real authentication). The endpoint-by-endpoint table is in
   [ARCHITECTURE.md → API surface](ARCHITECTURE.md#api-surface).
 
 ### Evaluation harness
@@ -224,7 +228,15 @@ Edit `.env` and set:
 - `LLM_API_KEY` — your Groq key
 - `ADMIN_API_KEY` — any string you choose; it gates all admin/mutating endpoints
 
-Everything else has a working local default. `LLM_MODEL` defaults to
+Everything else has a working local default. A few worth knowing:
+- `DEBUG=true` (as in `.env.example`) lets the frontends' dev servers on any
+  localhost port call the API. It defaults to `false`; with it off, set
+  `CORS_ALLOWED_ORIGINS` or browsers are refused.
+- `DEMO_ENDPOINTS_ENABLED` turns the admin console's simulator on or off.
+- `LLM_MAX_RETRIES` (default 5) is how many times an LLM call is retried on
+  a 429, waiting for Groq's `retry-after` each time.
+
+`LLM_MODEL` defaults to
 `openai/gpt-oss-120b`; Groq retires models periodically, so if the worker
 logs `model_not_found`, list what your key can use with
 `curl https://api.groq.com/openai/v1/models -H "Authorization: Bearer $LLM_API_KEY"`.
@@ -267,11 +279,9 @@ customers, 10,000 orders — a few seconds):
 make seed
 ```
 
-`make seed` wipes and regenerates the seed tables, but not the tickets,
-approvals, and notifications the agents create — so once the agents have
-run, re-seeding fails with a foreign-key error (and changes nothing). To
-start over, `docker compose down -v` (deletes **all** data volumes), then
-repeat from step 2.
+`make seed` wipes everything — including the tickets, approvals,
+notifications and agent runs the agents created — and regenerates the seed
+data, so it's safe to re-run at any time.
 
 ### 4. Use it
 
@@ -288,9 +298,8 @@ header field — it's stored in your browser's `localStorage`, not baked in.
 To see the agents actually do something, use the **Simulate** page (below),
 or on **Overview → Delayed orders** use "Publish N to event stream" with a
 small N to push existing overdue orders through. Each delayed-order event
-is a full agent run — about 6–7 LLM calls and 8–12k tokens in practice —
-and the worker sleeps 30 s after every event, so expect roughly one per
-minute (see `CLAUDE.md`, gotcha #3). Follow along with
+is a full agent run — 2–3 LLM calls and 3–6k tokens in practice — and
+the worker sleeps 15 s after every event, so expect a few per minute (see `CLAUDE.md`, gotcha #3). Follow along with
 `docker compose logs -f worker`.
 [ARCHITECTURE.md](ARCHITECTURE.md#worked-example-one-delayed-order-end-to-end)
 walks through one real order in detail.
@@ -345,12 +354,10 @@ make test
 uv run pytest backend/tests/services/
 ```
 
-Expect 6 failures in `tests/agents/test_delayed_order.py`,
-`tests/agents/test_rag_integration.py`, and `tests/rag/test_policy_search.py`.
-These depend on live services (the Groq API, a HuggingFace model download,
-a populated Qdrant), and `conftest.py` deliberately injects a dummy Groq
-key, so they fail even online; a couple have also drifted from the code
-they test. Everything else — service layer, API, concurrency, security —
+Start the Docker stack first: the RAG tests need a populated Qdrant (and
+download the embedding model on first run), and one tool test reads
+Postgres. No test calls the Groq API — `conftest.py` injects a dummy key and
+every LLM call is mocked. Everything else — service layer, API, concurrency, security —
 runs against in-memory SQLite with external calls mocked.
 
 ```bash
@@ -417,15 +424,17 @@ skim too. The top-level `src/`, `workers/`, `infrastructure/`, and
   sequential, so anyone can browse any order — a demo-friendliness
   trade-off, not access control (see [ARCHITECTURE.md → API surface](ARCHITECTURE.md#api-surface)).
 - The simulator's demo endpoints create real orders, customers and tickets.
-  They're behind the admin key and rate-limited, but should be disabled
-  outside a demo/staging environment.
+  They're behind the admin key and rate-limited; set
+  `DEMO_ENDPOINTS_ENABLED=false` outside a demo/staging environment.
 - Evaluation datasets are intentionally small (12–15 scenarios each) to
   stay inside a free-tier LLM quota — treat the pass/fail gates as
   smoke tests, not statistically rigorous benchmarks.
 - Verifying these docs against the running system turned up a handful of
-  real bugs. Triage token accounting has since been fixed; the rest (the
-  approval-path trace Link, seed re-runs, and others) are documented but
-  not yet fixed — see [ARCHITECTURE.md → Known gaps](ARCHITECTURE.md#known-gaps).
+  real bugs, and auditing the agent turned up wasted LLM calls and
+  over-exposed public reads. Most are fixed — triage token accounting, the
+  approval-path trace Link, seed re-runs, the agent's call count, and the
+  `/tickets` and `/customers/{id}` reads that leaked customer emails; the
+  rest are documented but not yet fixed — see [ARCHITECTURE.md → Known gaps](ARCHITECTURE.md#known-gaps).
 
 ## License
 

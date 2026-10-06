@@ -64,14 +64,17 @@ sequenceDiagram
     Worker->>Worker: SET processed_event:id processing NX (atomic claim, skip if taken)
     Worker->>DOA: investigate_delayed_order(order_id, delay_days)
 
+    DOA->>PG: prefetch order, shipment, customer (no LLM call)
     loop until no tool calls, max 5 tool iterations
-        DOA->>Groq: agent_step (tools bound)
-        Groq-->>DOA: tool_calls
-        DOA->>Tools: get_order / get_shipment / get_customer / search_shipping_policy
-        Tools-->>DOA: JSON results
+        DOA->>Groq: agent_step (tools bound, records in first message)
+        Groq-->>DOA: tool_calls (usually search_shipping_policy)
+        DOA->>Tools: search_shipping_policy
+        Tools-->>DOA: JSON results (content, source, page, chunk_index)
     end
-    DOA->>Groq: decision prompt
-    Groq-->>DOA: JSON decision (severity, resolution, reasoning, customer_message, evidence)
+    Groq-->>DOA: final agent_step = JSON decision (severity, resolution, reasoning, customer_message, evidence)
+    opt final turn isn't valid decision JSON
+        DOA->>Groq: decision prompt (fallback call)
+    end
     DOA->>DOA: guardrails - CRITICAL severity or ESCALATE forces requires_human
     DOA->>PG: INSERT agent_executions (tokens, llm_call_count, duration)
 
@@ -97,7 +100,7 @@ sequenceDiagram
         Action->>PG: INSERT notifications (one email: the drafted message and/or a ticket acknowledgement, with a View status link)
     end
 
-    Worker->>Stream: XACK, then sleep 30 s
+    Worker->>Stream: XACK, then sleep 15 s
     Worker->>Stream: XREADGROUP picks up TICKET_CREATED
     Worker->>Triage: process_ticket(ticket_id)
     Triage->>Tools: last 5 tickets for the customer + retrieve_policy (top 3)
@@ -125,9 +128,9 @@ What the diagram leaves out:
   of its own (see `task_id` below).
 - **Email delivery.** `INSERT notifications` always happens. A real email is
   sent only when `MAILJET_DEMO_ENABLED=true`; see [Customer emails](#customer-emails).
-- **Pacing.** The worker sleeps 30 s after every event, whatever the outcome
-  (see gotcha #3 in `CLAUDE.md`), so throughput is capped at about 2 events
-  per minute.
+- **Pacing.** The worker sleeps 15 s after every event, whatever the outcome
+  (see gotcha #3 in `CLAUDE.md`), so throughput is capped at about 4 events
+  per minute. (It was 30 s until a duplicated sleep was removed.)
 
 ## Data model
 
@@ -416,7 +419,8 @@ Two details worth pausing on:
   replacement shipment ... at no additional cost" is a commitment the company
   hasn't signed off on. This is exactly the kind of message the approval step
   exists to catch.
-- **`trace_context` is `null`.** See [Known gaps](#known-gaps).
+- **`trace_context` is `null`.** This run predates the fix: `decision_node`
+  now stores the trace carrier there, so approving it creates an OTel Link.
 
 The `agent_executions` row for the run:
 
@@ -497,7 +501,7 @@ flowchart LR
         b3 --> b4["rag.retrieve_policy"]
         b3 --> b5["llm.triage · 1.2 s"]
     end
-    T1 -. "joined only by the original_trace_id attribute (no OTel Link, see Known gaps)" .-> T2
+    T1 -. "joined only by the original_trace_id attribute (this run predates the OTel Link fix)" .-> T2
 ```
 
 The second trace shows cross-process propagation working. The span
@@ -531,9 +535,11 @@ table covers only who can call what.
 | `GET /health` (root, no prefix) | public | liveness check |
 | `GET /api/v1/health/llm` | public | shows the configured model and whether a key is set (the key is never returned) |
 | `GET /portal/orders/{id}` | public, **rate-limited 20/min per IP** | customer portal order lookup (the portal page itself also accepts `/?order=<id>`) |
-| `GET /tickets?status=&customer_id=` | public | customer portal (a customer's tickets), admin console (ticket list) |
-| `GET /orders/delayed` | public | admin console, "Delayed orders" panel |
-| `GET /orders/{id}`, `GET /customers/{id}`, `GET /products/{id}` | public | no frontend uses these, they're plain reads |
+| `GET /portal/orders/{id}/tickets` | public, rate-limited with the lookup | customer portal: the order's customer's tickets as `id`, `title`, `status`, `created_at` only. Agent-created tickets get a customer-facing title |
+| `GET /tickets?status=&customer_id=` | **X-API-Key** | admin console (ticket list) |
+| `GET /orders/delayed` | **X-API-Key** | admin console, "Delayed orders" panel |
+| `GET /orders/{id}`, `GET /customers/{id}` | **X-API-Key** | plain reads, no frontend uses them over HTTP |
+| `GET /products/{id}` | public | plain read |
 | `POST /orders/monitor/delayed?limit=` | **X-API-Key**, rate-limited 5/min per IP | admin console "Publish N" |
 | `POST /customers`, `POST /products`, `POST /orders`, `POST /shipments/{order_id}` | **X-API-Key** | scripts / manual use |
 | `GET /admin/approvals/pending`, `POST /admin/approvals/{id}/approve`, `/reject` | **X-API-Key** (whole router) | admin console approvals |
@@ -542,25 +548,22 @@ table covers only who can call what.
 | `GET /admin/orders/{id}/timeline`, `GET /admin/tickets/{id}/timeline` (`?event_id=&message_id=` optional) | **X-API-Key** | admin console Simulate page (live timeline) |
 | worker `GET :8001/health` | public (separate process) | Docker healthcheck + autoheal |
 
-**Where the boundary actually sits:** writes and `/admin/*` need the key.
-Every other read is public. The intended reason is the customer portal: a
-guest who types in an order ID can't hold an API key, so the portal's lookup
-has to be open. It looks orders up by number alone, with only a per-IP rate
+**Where the boundary actually sits:** everything needs the key except the
+two `/portal/*` reads, `/products/{id}` and the health checks. The portal
+reads are open because a guest who types in an order ID can't hold an API
+key. It looks orders up by number alone, with only a per-IP rate
 limit. Order IDs are sequential, so this is enumerable: anyone can read any
 order's items, shipment and tracking number by trying numbers. That's a
 deliberate demo-friendliness trade-off on synthetic data, not real access
 control.
 
-The honest caveat is that the public reads are wider than the portal needs:
-
-- `GET /tickets` with no filter returns **every** ticket with its customer's email.
-- `GET /orders/delayed` returns every delayed order with the customer's email
-  (about 1.3 MB against the seed data).
-
-The admin console reads both of those without its key. Tightening this means
-moving those two reads behind `require_api_key`, and putting a second
-factor (the email on the order, or unguessable order references) back on
-the portal lookup.
+Until recently every other read was public too, and `GET /tickets` with no
+filter returned every ticket with its customer's email and the agent's
+internal reasoning, while `GET /customers/{id}` let anyone walk the sequential
+IDs to collect every customer's email. Those now need the key, and the portal
+has its own ticket endpoint that returns only customer-safe fields. Real
+access control would still need a second factor on the portal lookup (the
+email on the order, or unguessable order references).
 
 **Auth is one shared secret, not identity.** `reviewed_by` on an approval is
 whatever string the console sends (it prompts for a reviewer name and keeps
@@ -611,9 +614,10 @@ approve something the human never saw.
 **Same-trace vs. linked-trace.**
 - *Auto-execute path:* the follow-up event carries a `traceparent`, so triage
   continues the investigation's trace across the process boundary.
-- *Approval path:* by design this should use an OTel **Link** back to the
-  original trace, since that trace closed minutes or hours earlier. In
-  practice it currently doesn't; see the next section.
+- *Approval path:* an OTel **Link** back to the original trace, since that
+  trace closed minutes or hours earlier. `decision_node` stores the trace
+  carrier in `AgentDecision.trace_context`, and `approve()` builds the Link
+  from it.
 
 **Per-task usage via a propagated `task_id`, not inferred.** A triage run
 belongs with the delayed-order run whose ticket it classified. Grouping by
@@ -645,16 +649,21 @@ highest cutoff that keeps recall@5 at 12/12, while the previous 0.6 dropped
 it to 9/12 and left three questions with no vector results. The embedding
 model, Qdrant connection and BM25 index all load on first use, and the
 worker warms them up at start-up. Results are LRU-cached
-(50 entries) in-process. The cache key is the query lowercased, trimmed, and
-**truncated to 50 characters**, so two long queries that share a 50-character
-prefix get the same cached result.
+(50 entries) in-process, keyed on the whole query lowercased with its
+whitespace collapsed. (It used to be truncated to 50 characters, which both
+made long queries with a shared prefix collide and searched them on that
+prefix alone.)
 
-**Why the pacing looks excessive.** There's a 30 s sleep after each processed
-event, and backoff plus checkpointing in the evaluation harness. (There used
+**Why the pacing looks excessive.** There's a 15 s sleep after each processed
+event (30 s until a duplicated sleep was removed), and backoff plus checkpointing in the evaluation harness. (There used
 to be a 5 s gap between published events too. It ran inside the HTTP request
 and protected nothing, since the worker paces itself, so it was removed.) All of it comes from the Groq free
-tier. Even with the 30 s sleep, the worked example's decision call hit two
-`429`s.
+tier. Even with the then 30 s sleep, the worked example's decision call hit two
+`429`s: the free tier allows `gpt-oss-120b` only 8K tokens a minute, and that
+one run used 8,301. The agent has since been trimmed to 2–3 calls and 3–6K
+tokens a run (records prefetched, no separate decision call, slimmer policy
+results), and both LLM clients retry up to `LLM_MAX_RETRIES` (5) times,
+waiting for Groq's `retry-after` each time.
 
 ## Known gaps
 
@@ -670,52 +679,26 @@ status "Shipped". A failed approval execution left the approval stuck as
 APPROVED. A worker that died mid-event lost the event. `make test` collected
 the manual scripts in `backend/scripts/`. The triage prompt could be broken
 out of with a closing delimiter tag, left customer history undelimited, and
-sent customer text as a system message.)
+sent customer text as a system message. Also fixed: the approval-path OTel
+Link was never created because nothing set `decision.trace_context`;
+`get_order` returned the delivery date under the key `expected_salary`;
+hitting `MAX_TOOL_ITERATIONS` didn't force human review (the guard sat in an
+unreachable `tool_node` branch, and `decision_node` now enforces it); six
+tests failed because they mocked `llm` instead of `llms_with_tools` or
+indexed the policy tool's JSON string as a list; `DEBUG` defaulted to `true`,
+so an unconfigured deployment got the permissive localhost CORS; and the demo
+endpoints had no off switch (now `DEMO_ENDPOINTS_ENABLED`). The default
+model had no price in `pricing.py`; `make seed` failed with a foreign-key
+violation once the agents had run; `core/tracing.py` pointed at a doc that
+doesn't exist; the portal showed agent tickets by their internal subject;
+and `/tickets`, `/customers/{id}`, `/orders/{id}` and `/orders/delayed` were
+public. Each has a regression test.)
 
-- **The approval-path OTel Link is never created.** `approval_service.approve()`
-  builds the Link from `decision.trace_context`. Nothing in production code
-  ever sets that field (only tests do), so it's always `null` and
-  `link_from_carrier()` returns `None`. The approval trace records only an
-  `original_trace_id` attribute. You can still find the original trace by
-  searching for that ID, but Jaeger won't render it as a link.
-  Fix: set `decision.trace_context = inject_trace_context()` next to
-  `trace_id` in `decision_node`.
-- **The default model has no price.** `pricing.py` lists only Llama/Gemma
-  models, so with `openai/gpt-oss-120b` the usage monitor reports
-  `cost_incomplete: true` and a total cost of 0.
-- **`make seed` isn't re-runnable once the agents have run.** It deletes
-  orders but not the tickets, approvals, and notifications that reference
-  them, so Postgres rejects it with a foreign-key violation. The rejected
-  run makes no changes. To reseed from scratch, use
-  `docker compose down -v`, which destroys *all* volumes.
-- **Six tests fail even with network access.**
-  - 4 in `tests/agents/test_delayed_order.py` call the real Groq API, but
-    `conftest.py` injects a dummy `LLM_API_KEY`, so they get a 401.
-  - `test_rag_integration.py` indexes the tool's result as a list of dicts,
-    but the tool now returns a JSON string.
-  - `test_warranty_policy_retrieval` gets empty results.
-- **Stale reference.** `core/tracing.py`'s docstring points to
-  `backend/docs/observability.md`, which doesn't exist.
-- **The portal shows internal ticket subjects.** The customer portal lists
-  agent-created tickets by their internal subject, e.g. "ESCALATED: Delayed
-  order (HIGH)". The emails avoid this, but the portal doesn't. Fix: a
-  customer-facing title for agent-created tickets.
-- **`get_order` mislabels a field.** `agents/tools/order_tools.py` returns the
-  expected delivery date under the key `expected_salary`, so that's what the
-  delayed-order agent sees in the tool result.
-- **Hitting the tool-iteration cap doesn't force escalation.** When
-  `tool_node` reaches `MAX_TOOL_ITERATIONS` it returns `requires_human: True`,
-  but nothing downstream reads it. The decision comes only from
-  `decision_node`.
 - **Pre-`task_id` triage runs were grouped by a heuristic.** The migration
   attached an old triage run to the latest earlier delayed-order run on the
   same order only if its ticket's subject starts with the agent's own prefixes
   ("ESCALATED: Delayed order", "Delayed order - "). New rows don't rely on
   this.
-- **Demo endpoints exist in every environment.** `/admin/demo/*` create real
-  orders, customers and tickets, and there's no setting to turn them off.
-  They're behind the admin key and rate-limited, but should be disabled
-  outside demo or staging.
 - **Real email reaches seeded addresses.** With `MAILJET_DEMO_ENABLED=true`,
   the automatic path emails whatever address a seeded customer has. Use the
   simulator's email field to target your own inbox.
