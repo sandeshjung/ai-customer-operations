@@ -17,7 +17,8 @@ Backend is swappable via env vars alone, no code changes:
   OSS 3.22+. Point OTEL_EXPORTER_OTLP_ENDPOINT at
   https://cloud.langfuse.com/api/public/otel (or your self-hosted URL)
   and set OTEL_EXPORTER_OTLP_HEADERS to a Basic-auth header built from
-  your public/secret key — see backend/docs/observability.md.
+  your public/secret key (base64 of "public:secret") — see the
+  Observability section of README.md.
 
 If the collector is unreachable, the SDK's BatchSpanProcessor swallows
 export failures in a background thread — it never raises into request

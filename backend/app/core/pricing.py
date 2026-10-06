@@ -2,6 +2,10 @@
 # these periodically — verify against https://groq.com/pricing before relying
 # on this for anything beyond a rough efficiency signal in the admin console.
 MODEL_PRICING_PER_MILLION_TOKENS: dict[str, tuple[float, float]] = {
+    # From console.groq.com/docs/models, checked 2026-10-06.
+    "openai/gpt-oss-120b": (0.15, 0.60),
+    "openai/gpt-oss-20b": (0.075, 0.30),
+    # Older entries; Groq's models page no longer lists a price for these.
     "llama-3.1-8b-instant": (0.05, 0.08),
     "llama-3.3-70b-versatile": (0.59, 0.79),
     "llama-3.1-70b-versatile": (0.59, 0.79),

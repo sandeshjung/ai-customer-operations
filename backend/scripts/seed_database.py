@@ -3,11 +3,15 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from app.core.database import SessionLocal
+from app.models.agent_execution import AgentExecution
 from app.models.customer import Customer
+from app.models.human_approval import HumanApproval
+from app.models.notification import Notification
 from app.models.order import Order, OrderStatus
 from app.models.order_item import OrderItem
 from app.models.product import Product
 from app.models.shipment import Shipment, ShipmentStatus
+from app.models.support_ticket import SupportTicket
 from faker import Faker
 from sqlalchemy import delete
 
@@ -19,6 +23,14 @@ NUM_ORDERS = 10000
 
 
 def clear_database(db):
+    # Children before parents: once the agents have run, notifications,
+    # approvals and tickets reference orders and customers, and deleting the
+    # orders first fails with a foreign-key violation. Agent runs have no FK
+    # but describe orders that are about to disappear, so they go too.
+    db.execute(delete(Notification))
+    db.execute(delete(HumanApproval))
+    db.execute(delete(SupportTicket))
+    db.execute(delete(AgentExecution))
     db.execute(delete(Shipment))
     db.execute(delete(OrderItem))
     db.execute(delete(Order))
