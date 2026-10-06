@@ -180,22 +180,16 @@ class TestRetryAndDeadLetter:
 
 
 class TestSleepBehavior:
-    """Documents current behavior rather than asserting it's correct.
+    """consume_events() pauses PROCESSING_DELAY_SECONDS once per message,
+    whatever the outcome, as a Groq free-tier rate-limit safeguard.
 
-    consume_events() unconditionally sleeps twice per message — once for
-    `time.sleep(15)` and again for `time.sleep(PROCESSING_DELAY_SECONDS)`
-    (also 15) — regardless of whether the event succeeded, failed, or was
-    skipped as already-claimed. That's 30 seconds of dead time per event
-    on top of any retry backoff, meaning this worker tops out at roughly
-    2 events/minute no matter what. This looks like it was meant as one
-    rate-limit safeguard (probably for the Groq free tier) that ended up
-    duplicated rather than two intentional separate delays — flagging it
-    here rather than "fixing" it, since halving it might reintroduce the
-    exact rate-limit problem it was likely added to avoid. Worth a
-    deliberate decision, not a silent change.
+    It used to sleep twice (a hardcoded 15 s plus PROCESSING_DELAY_SECONDS),
+    30 s of dead time that capped the worker at ~2 events/minute. That was a
+    duplicated safeguard; it was halved deliberately once a delayed-order run
+    dropped to 2-3 LLM calls and the LLM clients started waiting out 429s.
     """
 
-    def test_sleeps_twice_per_message_regardless_of_outcome(self):
+    def test_sleeps_once_per_message_regardless_of_outcome(self):
         event = _order_delayed_event()
 
         with (
@@ -212,4 +206,6 @@ class TestSleepBehavior:
         ):
             event_consumer.consume_events()
 
-        assert mock_sleep.call_args_list == [call(15), call(15)]
+        assert mock_sleep.call_args_list == [
+            call(event_consumer.PROCESSING_DELAY_SECONDS)
+        ]

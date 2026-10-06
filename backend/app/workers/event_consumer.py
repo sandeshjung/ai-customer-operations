@@ -30,6 +30,10 @@ from app.services.approval_service import create_approval
 from app.services.triage_service import process_ticket
 
 CONSUMER_NAME = "worker-1"
+# Pause after every event, as a Groq free-tier rate-limit safeguard (8K
+# tokens/min for gpt-oss-120b). There used to be a second, duplicated 15 s
+# sleep; one is enough now that a delayed-order run is 2-3 LLM calls and the
+# LLM clients wait out a 429's retry-after themselves (LLM_MAX_RETRIES).
 PROCESSING_DELAY_SECONDS = 15
 
 
@@ -319,7 +323,6 @@ def handle_message(message_id, fields: dict, recovered: bool = False) -> None:
                         CONSUMER_GROUP,
                         message_id,
                     )
-    time.sleep(15)
 
     if not success:
         print(f"Event moved to DLQ: {event_id}")
