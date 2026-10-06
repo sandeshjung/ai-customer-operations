@@ -1,9 +1,13 @@
+import json
 import time
 import uuid
 
 from app.agents.graphs.delayed_order import delayed_order_graph
 from app.agents.guardrails import validate_decision
 from app.agents.prompts import build_delayed_order_investigation_message
+from app.agents.tools.customer_tools import get_customer
+from app.agents.tools.order_tools import get_order
+from app.agents.tools.shipment_tools import get_shipment
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.tracing import traced
@@ -38,6 +42,46 @@ def extract_tool_steps(messages: list) -> list[dict]:
     return steps
 
 
+def prefetch_order_records(db, order_id: int) -> tuple[dict, list[dict]]:
+    """Loads the order, shipment and customer the agent always needs, so it
+    doesn't spend an LLM round trip on each lookup (the agent used to fetch
+    them one tool call per turn — about 4 of a run's 6-7 LLM calls).
+
+    Returns the records for the first message, plus timeline steps in the
+    same shape extract_tool_steps() produces, marked as prefetched.
+    """
+    order = get_order(db, order_id)
+    shipment = get_shipment(db, order_id)
+    customer_record = get_customer(db, order["customer_id"]) if order else None
+    # The agent needs the name for the customer message; the email address
+    # isn't needed to decide anything, so it isn't sent to the LLM.
+    customer = (
+        {"id": customer_record["id"], "name": customer_record["name"]}
+        if customer_record
+        else None
+    )
+
+    records = {"order": order, "shipment": shipment, "customer": customer}
+    steps = [
+        {"tool": "get_order", "args": {"order_id": order_id}, "result": order},
+        {"tool": "get_shipment", "args": {"order_id": order_id}, "result": shipment},
+    ]
+    if order:
+        steps.append(
+            {
+                "tool": "get_customer",
+                "args": {"customer_id": order["customer_id"]},
+                "result": customer,
+            }
+        )
+    for step in steps:
+        step["result"] = json.dumps(step["result"] or {"error": "not found"})[
+            :MAX_STEP_RESULT_CHARS
+        ]
+        step["prefetched"] = True
+    return records, steps
+
+
 def investigate_delayed_order(db, order_id: int, delay_days: int, event_id: str):
     execution_id = str(uuid.uuid4())
     logger.info(
@@ -50,6 +94,8 @@ def investigate_delayed_order(db, order_id: int, delay_days: int, event_id: str)
     )
 
     start_time = time.perf_counter()
+
+    records, prefetched_steps = prefetch_order_records(db, order_id)
 
     with traced(
         "delayed_order_agent.run",
@@ -65,14 +111,12 @@ def investigate_delayed_order(db, order_id: int, delay_days: int, event_id: str)
                     {
                         "role": "user",
                         "content": build_delayed_order_investigation_message(
-                            order_id, delay_days
+                            order_id, delay_days, **records
                         ),
                     }
                 ],
                 "order_id": order_id,
-                "order": None,
-                "shipment": None,
-                "customer": None,
+                **records,
                 "delay_days": delay_days,
                 "decision": None,
                 "requires_human": False,
@@ -117,7 +161,7 @@ def investigate_delayed_order(db, order_id: int, delay_days: int, event_id: str)
         total_tokens=result.get("llm_total_tokens", 0),
         llm_call_count=result.get("llm_call_count", 0),
         duration_ms=duration_ms,
-        steps=extract_tool_steps(result.get("messages", [])),
+        steps=prefetched_steps + extract_tool_steps(result.get("messages", [])),
     )
 
     db.add(execution)

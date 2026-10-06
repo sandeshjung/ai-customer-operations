@@ -110,7 +110,11 @@ def test_persists_order_id_and_tool_steps(db_session):
     execution = db_session.query(AgentExecution).filter_by(event_id="evt-steps").one()
     assert execution.order_id == 7
     assert execution.task_id == "evt-steps"
-    assert execution.steps == [
+    # The prefetched lookups come first (order 7 doesn't exist in this DB,
+    # so there's no customer lookup), then the tool calls the agent made.
+    prefetched = [step for step in execution.steps if step.get("prefetched")]
+    assert [step["tool"] for step in prefetched] == ["get_order", "get_shipment"]
+    assert execution.steps[len(prefetched) :] == [
         {"tool": "get_order", "args": {"order_id": 7}, "result": '{"id": 7}'},
         {
             "tool": "get_shipment",
@@ -133,3 +137,87 @@ def test_extract_tool_steps_truncates_long_results():
         ]
     )
     assert len(steps[0]["result"]) == agent_service.MAX_STEP_RESULT_CHARS
+
+
+def _seed_order_with_shipment(db_session):
+    from datetime import UTC, date, datetime
+
+    from app.models.customer import Customer
+    from app.models.order import Order
+    from app.models.shipment import Shipment
+
+    customer = Customer(name="Dana Lee", email="dana@example.com")
+    db_session.add(customer)
+    db_session.commit()
+    order = Order(
+        customer_id=customer.id, total_amount=42, expected_delivery=date(2026, 9, 1)
+    )
+    db_session.add(order)
+    db_session.commit()
+    db_session.add(
+        Shipment(
+            order_id=order.id,
+            tracking_number="TRK-1",
+            status="IN_TRANSIT",
+            carrier="FedEx",
+            last_updated=datetime(2026, 9, 2, tzinfo=UTC),
+        )
+    )
+    db_session.commit()
+    return customer, order
+
+
+def test_prefetches_records_into_the_first_message(db_session):
+    """The agent used to spend one LLM round trip per lookup (order, then
+    shipment, then customer). They're fixed lookups, so agent_service loads
+    them and the graph starts with the facts already in the message."""
+    customer, order = _seed_order_with_shipment(db_session)
+
+    with patch.object(agent_service, "delayed_order_graph") as mock_graph:
+        mock_graph.invoke.return_value = {"decision": _make_decision()}
+        agent_service.investigate_delayed_order(
+            db=db_session, order_id=order.id, delay_days=5, event_id="evt-prefetch"
+        )
+
+    state = mock_graph.invoke.call_args.args[0]
+    first_message = state["messages"][0]["content"]
+    assert '"expected_delivery": "2026-09-01"' in first_message
+    assert '"tracking_number": "TRK-1"' in first_message
+    assert "Dana Lee" in first_message
+    # Not needed for the decision, so not sent to the LLM.
+    assert "dana@example.com" not in first_message
+    assert state["shipment"]["status"] == "IN_TRANSIT"
+    assert state["customer"] == {"id": customer.id, "name": "Dana Lee"}
+
+    execution = (
+        db_session.query(AgentExecution).filter_by(event_id="evt-prefetch").one()
+    )
+    assert [step["tool"] for step in execution.steps] == [
+        "get_order",
+        "get_shipment",
+        "get_customer",
+    ]
+    assert all(step["prefetched"] for step in execution.steps)
+
+
+def test_missing_shipment_is_stated_explicitly(db_session):
+    """A missing shipment is an operational signal, so the message must say
+    so rather than just leave the record out."""
+    from app.models.customer import Customer
+    from app.models.order import Order
+
+    customer = Customer(name="No Ship", email="noship@example.com")
+    db_session.add(customer)
+    db_session.commit()
+    order = Order(customer_id=customer.id, total_amount=10, expected_delivery=None)
+    db_session.add(order)
+    db_session.commit()
+
+    with patch.object(agent_service, "delayed_order_graph") as mock_graph:
+        mock_graph.invoke.return_value = {"decision": _make_decision()}
+        agent_service.investigate_delayed_order(
+            db=db_session, order_id=order.id, delay_days=9, event_id="evt-noship"
+        )
+
+    first_message = mock_graph.invoke.call_args.args[0]["messages"][0]["content"]
+    assert "no shipment record" in first_message

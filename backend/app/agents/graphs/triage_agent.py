@@ -18,6 +18,7 @@ llm = ChatGroq(
     model=settings.LLM_MODEL,
     api_key=settings.LLM_API_KEY,
     temperature=0,
+    max_retries=settings.LLM_MAX_RETRIES,
 )
 
 

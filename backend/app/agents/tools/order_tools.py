@@ -16,7 +16,7 @@ def get_order(
         "id": order.id,
         "customer_id": order.customer_id,
         "status": order.status,
-        "expected_salary": (
+        "expected_delivery": (
             order.expected_delivery.isoformat() if order.expected_delivery else None
         ),
     }

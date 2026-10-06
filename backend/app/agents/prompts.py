@@ -11,21 +11,47 @@ import re
 # --- Delayed-order agent (LangGraph, app/agents/graphs/delayed_order.py) ---
 
 
-def build_delayed_order_investigation_message(order_id: int, delay_days: int) -> str:
-    """Initial user message that kicks off a delayed-order graph run."""
-    return f"Investigate delayed order {order_id}. It is {delay_days} days late."
+def build_delayed_order_investigation_message(
+    order_id: int,
+    delay_days: int,
+    order: dict | None = None,
+    shipment: dict | None = None,
+    customer: dict | None = None,
+) -> str:
+    """Initial user message that kicks off a delayed-order graph run.
+
+    agent_service prefetches the order, shipment and customer records and
+    passes them here, so the agent doesn't spend an LLM round trip on each
+    lookup. A missing record is stated explicitly — a missing shipment is
+    itself an operational signal.
+    """
+    message = f"Investigate delayed order {order_id}. It is {delay_days} days late."
+    if order is None and shipment is None and customer is None:
+        return message
+    records = {
+        "order": order or "not found",
+        "shipment": shipment or "no shipment record",
+        "customer": customer or "not found",
+    }
+    return (
+        f"{message}\n\nRecords (already fetched — do not look them up again):\n"
+        f"{json.dumps(records, default=str)}"
+    )
 
 
 DELAYED_ORDER_SYSTEM_PROMPT = """
 You are an AI operations agent responsible for investigating delayed orders.
 
-You are given an order ID and the number of days the order is delayed.
+You are given an order ID and the number of days the order is delayed,
+usually together with the order, shipment and customer records.
 
 Your job is to investigate the situation.
 
-Use tools when you need additional information.
+Use tools only for information you don't already have. If the records are
+in the first message, do not call get_order, get_shipment or get_customer.
+Request all the tool calls you need in a single turn where you can.
 
-You should generally investigate:
+You should generally consider:
 
 1. The order.
 2. The shipment.
@@ -56,6 +82,9 @@ If a policy is relevant to the decision, retrieve it
 before making the decision.
 
 Never invent policy rules.
+
+Once you have enough information, do not call any more tools: reply with
+the final decision instead, as described below.
 """
 
 
@@ -87,6 +116,12 @@ Rules:
 - Only include evidence that was actually retrieved.
 - If no policy was retrieved, return an empty evidence list.
 """
+
+
+# The agent's own system prompt includes the decision format, so the turn in
+# which it stops calling tools already is the decision. decision_node only
+# calls the LLM again (with DELAYED_ORDER_DECISION_PROMPT) as a fallback.
+DELAYED_ORDER_AGENT_PROMPT = DELAYED_ORDER_SYSTEM_PROMPT + DELAYED_ORDER_DECISION_PROMPT
 
 
 # --- Triage agent (LangGraph, app/agents/graphs/triage_agent.py) ---

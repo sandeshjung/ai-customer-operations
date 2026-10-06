@@ -1,3 +1,5 @@
+import json
+
 from app.agents.graphs.delayed_order import (
     search_shipping_policy,
 )
@@ -5,8 +7,16 @@ from app.agents.graphs.delayed_order import (
 
 def test_policy_tool_returns_shipping_policy():
 
-    result = search_shipping_policy.invoke(
-        {"query": ("What should happen when an order is delayed more than five days?")}
+    # LangChain tools return strings to the model; this one JSON-encodes the
+    # retrieval results.
+    result = json.loads(
+        search_shipping_policy.invoke(
+            {
+                "query": (
+                    "What should happen when an order is delayed more than five days?"
+                )
+            }
+        )
     )
 
     assert result

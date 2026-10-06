@@ -6,19 +6,20 @@ import time
 from app.agents.guardrails import validate_decision
 from app.agents.models import AgentDecision
 from app.agents.prompts import (
+    DELAYED_ORDER_AGENT_PROMPT,
     DELAYED_ORDER_DECISION_PROMPT,
-    DELAYED_ORDER_SYSTEM_PROMPT,
 )
 from app.agents.state import DelayedOrderState
 from app.core.config import settings
 from app.core.logging import configure_logging
-from app.core.tracing import current_trace_id, traced
+from app.core.tracing import current_trace_id, inject_trace_context, traced
 from app.rag.service import retrieve_policy
 from langchain_core.messages import SystemMessage
 from langchain_core.tools import tool
 from langchain_groq import ChatGroq
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
+from pydantic import ValidationError
 
 configure_logging()
 
@@ -26,7 +27,12 @@ logger = logging.getLogger(__name__)
 
 MAX_TOOL_ITERATIONS = 5
 
-llm = ChatGroq(model=settings.LLM_MODEL, api_key=settings.LLM_API_KEY, temperature=0)
+llm = ChatGroq(
+    model=settings.LLM_MODEL,
+    api_key=settings.LLM_API_KEY,
+    temperature=0,
+    max_retries=settings.LLM_MAX_RETRIES,
+)
 
 
 @tool
@@ -101,6 +107,9 @@ def get_customer(customer_id: int) -> str:
             db.close()
 
 
+_POLICY_RESULT_KEYS = ("content", "source", "page", "chunk_index")
+
+
 @tool
 def search_shipping_policy(query: str) -> str:
     """Search company policies and support documentation."""
@@ -111,7 +120,16 @@ def search_shipping_policy(query: str) -> str:
     ) as span:
         results = retrieve_policy(query=query, limit=5)
         span.set_attribute("result_count", len(results))
-        return json.dumps(results, ensure_ascii=False)
+        # Only what the model needs to reason and cite evidence. Retrieval
+        # scores and the doc version would be resent on every later LLM call.
+        return json.dumps(
+            [
+                {key: r.get(key) for key in _POLICY_RESULT_KEYS}
+                for r in results
+                if isinstance(r, dict)
+            ],
+            ensure_ascii=False,
+        )
 
 
 tools = [get_order, get_shipment, get_customer, search_shipping_policy]
@@ -154,9 +172,8 @@ def agent_node(state: DelayedOrderState):
     ) as span:
         response = llms_with_tools.invoke(
             [
-                SystemMessage(
-                    content=DELAYED_ORDER_SYSTEM_PROMPT
-                ),  # ← tells LLM to investigate using tools
+                # Investigation instructions plus the decision format.
+                SystemMessage(content=DELAYED_ORDER_AGENT_PROMPT),
                 *state["messages"],
             ]
         )
@@ -206,22 +223,6 @@ def tool_node(state: DelayedOrderState):
         current_iterations + 1,
     )
 
-    if current_iterations >= MAX_TOOL_ITERATIONS:
-        logger.warning(
-            "Tool iteration limit reached | order_id=%s",
-            state["order_id"],
-        )
-        return {
-            "requires_human": True,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "Maximum tool-call iterations reached.Escalate to human review."
-                    ),
-                }
-            ],
-        }
     tool_calls = getattr(state["messages"][-1], "tool_calls", []) or []
     with traced(
         "tools.execute_batch",
@@ -242,60 +243,8 @@ def tool_node(state: DelayedOrderState):
     return {**result, "tool_iterations": current_iterations + 1}
 
 
-def decision_node(state: DelayedOrderState):
-    logger.info(
-        "Generating final decision | order_id=%s",
-        state["order_id"],
-    )
-
-    start_time = time.perf_counter()
-
-    # Use the tool-bound LLM so the model can call tools during decision
-    # generation (some decisions request policy lookups or documents).
-    with traced(
-        "llm.decision",
-        tracer_name="delayed_order_agent",
-        order_id=state["order_id"],
-        model=settings.LLM_MODEL,
-    ) as span:
-        response = llms_with_tools.invoke(
-            [
-                SystemMessage(content=DELAYED_ORDER_DECISION_PROMPT),
-                *state["messages"],
-            ]
-        )
-        usage = getattr(response, "usage_metadata", None)
-        if usage:
-            span.set_attribute("llm.input_tokens", usage.get("input_tokens", 0))
-            span.set_attribute("llm.output_tokens", usage.get("output_tokens", 0))
-            span.set_attribute("llm.total_tokens", usage.get("total_tokens", 0))
-
-    # latency_ms = (
-    #     time.perf_counter() - start_time
-    # ) * 1000
-
-    # content = getattr(response, "content", None)
-    # if not isinstance(content, str):
-    #     raise ValueError("Unexpected LLM response format")
-
-    # try:
-    #     decision_data = json.loads(content)
-    # except json.JSONDecodeError as exc:
-    #     raise ValueError(
-    #         f"Invalid decision JSON: {content}"
-    #     ) from exc
-
-    # decision = AgentDecision.model_validate(decision_data)
-    # structured_llm = llm.with_structured_output(AgentDecision)
-    # decision = structured_llm.invoke(
-    #     [
-    #         SystemMessage(content=DELAYED_ORDER_DECISION_PROMPT),
-    #         *state["messages"],
-    #     ]
-    # )
-
-    latency_ms = (time.perf_counter() - start_time) * 1000
-    content = response.content.strip()
+def _parse_decision(content: str) -> AgentDecision:
+    content = content.strip()
 
     # Strip markdown fences
     if content.startswith("```"):
@@ -314,17 +263,80 @@ def decision_node(state: DelayedOrderState):
             raise ValueError(f"Invalid decision JSON: {content[:500]}")
         decision_data = json.loads(match.group())
 
-    decision = AgentDecision.model_validate(decision_data)
+    return AgentDecision.model_validate(decision_data)
+
+
+def _decision_from_agent_turn(state: DelayedOrderState) -> AgentDecision | None:
+    """The agent's prompt asks it to answer with the decision JSON once it
+    stops calling tools, so that turn usually already is the decision. Returns
+    None when it isn't (tool cap hit mid-loop, or prose instead of JSON)."""
+    if not state["messages"]:
+        return None
+    last = state["messages"][-1]
+    if getattr(last, "type", None) != "ai" or getattr(last, "tool_calls", None):
+        return None
+    content = getattr(last, "content", None)
+    if not isinstance(content, str) or not content.strip():
+        return None
+    try:
+        return _parse_decision(content)
+    except (ValueError, ValidationError):
+        return None
+
+
+def decision_node(state: DelayedOrderState):
+    logger.info(
+        "Generating final decision | order_id=%s",
+        state["order_id"],
+    )
+
+    start_time = time.perf_counter()
+    usage_delta: dict = {}
+
+    decision = _decision_from_agent_turn(state)
+    if decision is None:
+        # Fallback: one more call that asks only for the decision. Uses the
+        # tool-bound LLM because the history contains tool calls.
+        with traced(
+            "llm.decision",
+            tracer_name="delayed_order_agent",
+            order_id=state["order_id"],
+            model=settings.LLM_MODEL,
+        ) as span:
+            response = llms_with_tools.invoke(
+                [
+                    SystemMessage(content=DELAYED_ORDER_DECISION_PROMPT),
+                    *state["messages"],
+                ]
+            )
+            usage = getattr(response, "usage_metadata", None)
+            if usage:
+                span.set_attribute("llm.input_tokens", usage.get("input_tokens", 0))
+                span.set_attribute("llm.output_tokens", usage.get("output_tokens", 0))
+                span.set_attribute("llm.total_tokens", usage.get("total_tokens", 0))
+        usage_delta = _usage_delta(state, usage)
+        decision = _parse_decision(response.content)
+
+    latency_ms = (time.perf_counter() - start_time) * 1000
+
     decision = validate_decision(decision)
+    # should_continue() routes here once the tool loop hits its cap, so the
+    # model may be deciding on incomplete evidence: never auto-execute that.
+    if state.get("tool_iterations", 0) >= MAX_TOOL_ITERATIONS:
+        decision.requires_human = True
     decision.trace_id = current_trace_id()
+    # Carrier for the approval path: approve() runs long after this trace has
+    # closed, so it Links back to this span instead of parenting under it.
+    decision.trace_context = inject_trace_context() or None
 
     logger.info(
-        "Decision generated | order_id=%s | severity=%s | resolution=%s | requires_human=%s | latency_ms=%.2f | reason=%s | trace_id=%s",
+        "Decision generated | order_id=%s | severity=%s | resolution=%s | requires_human=%s | latency_ms=%.2f | extra_llm_call=%s | reason=%s | trace_id=%s",
         state["order_id"],
         decision.severity,
         decision.resolution,
         decision.requires_human,
         latency_ms,
+        bool(usage_delta),
         decision.reasoning,
         decision.trace_id,
     )
@@ -333,7 +345,7 @@ def decision_node(state: DelayedOrderState):
         "decision": decision,
         "requires_human": decision.requires_human,
         "evidence": [evidence.model_dump() for evidence in decision.evidence],
-        **_usage_delta(state, usage),
+        **usage_delta,
     }
 
 
